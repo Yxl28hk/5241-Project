@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 from functools import wraps
 from pathlib import Path
 from secrets import token_hex
@@ -15,7 +14,6 @@ from psycopg.rows import dict_row
 from psycopg.errors import UniqueViolation
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
-from demo_db import DemoConnection
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -26,12 +24,11 @@ ALLOWED_EXTENSIONS = {"pdf", "doc", "docx", "ppt", "pptx", "mp4", "mov"}
 AVATAR_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 MAX_FILE_SIZE = 500 * 1024 * 1024
 ADMIN_EMAIL = os.environ.get("ZHIXING_ADMIN_EMAIL", "admin@zhixing.com").strip().lower()
-DEMO_MODE = os.environ.get("DEMO_MODE", "0") == "1"
-ADMIN_PASSWORD = os.environ.get("ZHIXING_ADMIN_PASSWORD") or ("Admin@123456" if DEMO_MODE else "")
+ADMIN_PASSWORD = os.environ.get("ZHIXING_ADMIN_PASSWORD", "Admin@123456")
 
-app = Flask(__name__, static_folder=None)
+app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 app.config.update(
-    SECRET_KEY=os.environ.get("ZHIXING_SECRET_KEY") or token_hex(32),
+    SECRET_KEY=os.environ.get("ZHIXING_SECRET_KEY", "development-only-change-me"),
     MAX_CONTENT_LENGTH=MAX_FILE_SIZE,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -50,9 +47,6 @@ SEED_COURSES = [
 
 def get_db() -> Connection[Any]:
     if "db" not in g:
-        if DEMO_MODE:
-            g.db = DemoConnection(os.environ.get("DEMO_DATABASE_PATH", str(BASE_DIR / "demo.db")))
-            return g.db
         if not DATABASE_URL:
             raise RuntimeError(
                 "DATABASE_URL is not configured. Set it to your Neon PostgreSQL connection string."
@@ -108,20 +102,20 @@ def initialize_database() -> None:
         )"""
     )
     if db.execute("SELECT COUNT(*) AS count FROM courses").fetchone()["count"] == 0:
-        for seed in SEED_COURSES:
-            db.execute(
+        with db.cursor() as cursor:
+            cursor.executemany(
                 """INSERT INTO courses
                 (title, category, resource_type, description, author, duration, cover, badge)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                seed,
+                SEED_COURSES,
             )
     admin = db.execute("SELECT id FROM users WHERE email = %s", (ADMIN_EMAIL,)).fetchone()
-    if admin is None and ADMIN_PASSWORD:
+    if admin is None:
         db.execute(
             "INSERT INTO users (name, email, password_hash, role) VALUES (%s, %s, %s, 'admin')",
             ("平台管理员", ADMIN_EMAIL, generate_password_hash(ADMIN_PASSWORD)),
         )
-    elif admin is not None:
+    else:
         db.execute("UPDATE users SET role = 'admin' WHERE email = %s", (ADMIN_EMAIL,))
     db.execute("UPDATE users SET role = 'student' WHERE role = 'user'")
     db.commit()
@@ -139,7 +133,6 @@ def course_json(row: Mapping[str, Any]) -> dict:
 
 def user_json(row: Mapping[str, Any]) -> dict:
     user = dict(row)
-    user.pop("password_hash", None)
     user["avatar_url"] = f"/avatars/{user['avatar_filename']}" if user.get("avatar_filename") else None
     user["is_admin"] = user.get("role") == "admin"
     user.pop("avatar_filename", None)
@@ -194,13 +187,6 @@ def file_too_large(_error):
 @app.get("/")
 def index():
     return send_from_directory(BASE_DIR, "index.html")
-
-
-@app.get("/<filename>")
-def static_asset(filename):
-    if filename not in {"app.js", "styles.css", "prototype.js", "prototype.css"}:
-        return jsonify(error="文件不存在"), 404
-    return send_from_directory(BASE_DIR, filename)
 
 
 @app.get("/api/auth/me")
@@ -273,7 +259,7 @@ def register():
         )
         user_id = cursor.fetchone()["id"]
         db.commit()
-    except (UniqueViolation, sqlite3.IntegrityError):
+    except UniqueViolation:
         db.rollback()
         return jsonify(error="这个邮箱已经注册过了，请直接登录"), 409
     session["user_id"] = user_id
@@ -356,7 +342,7 @@ def update_profile():
     else:
         db.execute("UPDATE users SET name = %s WHERE id = %s", (name, session["user_id"]))
     db.commit()
-    user = db.execute("SELECT id, name, email, role, avatar_filename FROM users WHERE id = %s", (session["user_id"],)).fetchone()
+    user = db.execute("SELECT id, name, email, avatar_filename FROM users WHERE id = %s", (session["user_id"],)).fetchone()
     return jsonify(user=user_json(user))
 
 
@@ -563,20 +549,9 @@ def avatar_file(filename: str):
     return send_from_directory(UPLOAD_FOLDER, filename)
 
 
-from prototype import register_prototype, initialize_prototype
-register_prototype(app, get_db, login_required, DEMO_MODE)
-
-
-@app.cli.command("init-db")
-def init_db_command():
-    """Create additive schema and seed classroom learning content."""
+with app.app_context():
     initialize_database()
-    initialize_prototype(get_db())
-    print("Database initialized.")
 
 
 if __name__ == "__main__":
-    with app.app_context():
-        initialize_database()
-        initialize_prototype(get_db())
-    app.run(host="127.0.0.1", port=int(os.environ.get("PORT", "5000")), debug=False)
+    app.run(debug=True)
