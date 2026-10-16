@@ -1,22 +1,30 @@
 # 知行学习平台
 
-这是一个使用 **Python Flask + SQLite + HTML/CSS/JavaScript** 构建的学习平台示例。
+这是一个使用 **Python Flask + Neon PostgreSQL + HTML/CSS/JavaScript** 构建的学习平台示例。
 
 ## 启动项目
 
 在项目目录打开 PowerShell：
 
 ```powershell
-C:/Users/31033/AppData/Local/Programs/Python/Python312/python.exe -m pip install -r requirements.txt
-C:/Users/31033/AppData/Local/Programs/Python/Python312/python.exe app.py
+python -m pip install -r requirements.txt
+
+# 首次使用时编辑 .env，把 Neon 控制台 Connect 页面中的连接字符串填入 DATABASE_URL
+python app.py
 ```
 
 然后访问 <http://127.0.0.1:5000>。
 
-首次启动会自动创建：
+首次启动会自动在 Neon 数据库中创建：
 
-- `zhixing.db`：SQLite 数据库
+- `users`、`courses`、`learning_records`：应用数据表
 - `uploads/`：课程文件保存目录
+
+应用会自动读取项目根目录的 `.env`，不需要每次启动时重复设置环境变量。
+`DATABASE_URL` 是必需配置，建议使用 Neon 的 pooled connection string，并保留
+`sslmode=require`。`.env` 已加入 Git 忽略规则，不要把真实连接字符串提交到 Git。
+可以参考 [.env.example](C:/Users/31033/OneDrive/Desktop/学习/5241-Project/.env.example)
+填写本地 `.env`。
 
 ## 已提供的后端接口
 
@@ -36,6 +44,7 @@ C:/Users/31033/AppData/Local/Programs/Python/Python312/python.exe app.py
 - `GET /api/courses/<id>/learners`：教师查看自己课程、管理员查看任意课程的学习人员（仅返回昵称、进度和更新时间）
 - `DELETE /api/courses/<id>/learners/<user_id>`：教师或管理员移除课程学习记录，不会删除用户账号
 - `DELETE /api/courses/<id>`：删除当前用户自己上传的课程及其文件
+- `GET /api/admin/users`：管理员查看所有账户、教师创建的课程和学生学习记录
 
 ## 账号角色
 

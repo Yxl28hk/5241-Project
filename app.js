@@ -24,6 +24,7 @@ function updateUserUI() {
   $("#user-role-badge").textContent = user?.is_admin ? "管理员" : user?.is_teacher ? "教师" : user ? "学生" : "";
   $("#user-role-badge").classList.toggle("hidden", !user);
   $$("[data-upload-only]").forEach((element) => element.classList.toggle("hidden", !user?.can_upload));
+  $$("[data-admin-only]").forEach((element) => element.classList.toggle("hidden", !user?.is_admin));
   $("#user-avatar").textContent = user ? user.name.slice(0, 1) : "游";
   $("#profile-avatar").textContent = user ? user.name.slice(0, 1) : "游";
   $("#user-avatar").style.backgroundImage = "";
@@ -101,6 +102,7 @@ $$(".nav-link").forEach((button) => button.addEventListener("click", () => {
     else showToast("学生账号没有资源管理权限");
   }
   else if (button.dataset.view === "my-learning") openSpace("learning");
+  else if (button.dataset.view === "admin-users") openAdminUsers();
 }));
 $$(".category-tab").forEach((tab) => tab.addEventListener("click", async () => {
   state.category = tab.dataset.category; $$(".category-tab").forEach((item) => item.classList.toggle("active", item === tab));
@@ -238,6 +240,27 @@ async function openLearners(courseId) {
         await openLearners(courseId);
       } catch (error) { showToast(error.message); }
     }));
+  } catch (error) { showToast(error.message); }
+}
+async function openAdminUsers() {
+  if (!state.user?.is_admin) { showToast("需要管理员权限"); return; }
+  try {
+    const result = await api("/api/admin/users");
+    const roleNames = { admin: "管理员", teacher: "教师", student: "学生" };
+    $("#admin-users-list").innerHTML = result.users.length
+      ? result.users.map((user) => `
+        <section class="admin-user-card">
+          <div class="admin-user-heading">
+            <div class="author-avatar">${user.name.slice(0, 1)}</div>
+            <div class="space-item-info"><strong>${user.name}</strong><small>${user.email} · ${roleNames[user.role] || user.role}</small></div>
+            <span class="admin-user-count">${user.courses.length} 门课程 · ${user.learning_records.length} 条学习记录</span>
+          </div>
+          ${user.courses.length ? `<div class="admin-data-group"><h3>创建的课程</h3>${user.courses.map((course) => `<div class="admin-data-row"><span>${course.title}</span><small>${course.category} · ${course.resource_type.toUpperCase()}</small></div>`).join("")}</div>` : ""}
+          ${user.learning_records.length ? `<div class="admin-data-group"><h3>学习记录</h3>${user.learning_records.map((record) => `<div class="admin-data-row"><span>${record.title}</span><small>${record.author} · 进度 ${record.progress || 0}% · ${record.updated_at ? new Date(record.updated_at).toLocaleString("zh-CN") : "暂无时间"}</small></div>`).join("")}</div>` : ""}
+          ${!user.courses.length && !user.learning_records.length ? '<p class="admin-user-empty">暂时没有课程或学习记录。</p>' : ""}
+        </section>`).join("")
+      : '<div class="space-empty">暂时没有注册账户。</div>';
+    openModal("#admin-users-modal");
   } catch (error) { showToast(error.message); }
 }
 $("#profile-form").addEventListener("submit", async (event) => {

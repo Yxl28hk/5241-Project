@@ -21,6 +21,7 @@
         <button class="nav-link active" data-view="explore">发现课程</button>
         <button class="nav-link" data-view="my-learning">我的学习</button>
         <button class="nav-link" data-view="uploads" data-upload-only>资源管理</button>
+        <button class="nav-link hidden" data-view="admin-users" data-admin-only>账户数据</button>
       </nav>
       <div class="topbar-actions">
         <button class="icon-button notification" aria-label="通知">
@@ -170,6 +171,14 @@
       <button class="close-button" data-close-modal>×</button>
       <div class="modal-heading"><span class="section-kicker">COURSE MEMBERS</span><h2 id="learners-title">学习人员</h2><p id="learners-description"></p></div>
       <div id="learners-list" class="space-list"></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="admin-users-modal">
+    <div class="modal admin-users-modal" role="dialog" aria-modal="true" aria-labelledby="admin-users-title">
+      <button class="close-button" data-close-modal>×</button>
+      <div class="modal-heading"><span class="section-kicker">ADMINISTRATION</span><h2 id="admin-users-title">账户数据</h2><p>查看已注册账户、教师课程和学生学习记录。</p></div>
+      <div id="admin-users-list" class="admin-users-list"></div>
     </div>
   </div>
 
