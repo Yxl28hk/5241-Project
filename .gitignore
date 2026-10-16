@@ -5,5 +5,9 @@ __pycache__/
 .env.*
 !.env.example
 zhixing.db
+demo.db
+*.db-journal
+.pytest_cache/
+work/
 uploads/*
 !uploads/.gitkeep
