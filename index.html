@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>知行 · 学习平台</title>
+  <meta name="description" content="知行学习平台：发现好课程，上传并管理你的学习资源。" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="知行学习平台首页">
+        <span class="brand-mark">知</span>
+        <span>知行<span class="brand-dot">·</span></span>
+      </a>
+      <nav class="main-nav" aria-label="主导航">
+        <button class="nav-link active" data-view="explore">发现课程</button>
+        <button class="nav-link" data-view="my-learning">我的学习</button>
+        <button class="nav-link" data-view="uploads" data-upload-only>资源管理</button>
+      </nav>
+      <div class="topbar-actions">
+        <button class="icon-button notification" aria-label="通知">
+          <span class="icon">♧</span><span class="notification-dot"></span>
+        </button>
+        <button class="user-menu" id="user-menu">
+          <span class="avatar" id="user-avatar">游</span>
+          <span class="user-name" id="user-name">游客</span><span class="user-role-badge hidden" id="user-role-badge">管理员</span>
+          <span class="chevron">⌄</span>
+        </button>
+      </div>
+    </header>
+
+    <main id="app-main">
+      <section class="hero">
+        <div class="hero-copy">
+          <span class="eyebrow"><span class="eyebrow-line"></span>让学习，发生在每一天</span>
+          <h1>把每一次好奇<br /><em>变成真正的成长。</em></h1>
+          <p>精选课程与学习资料，帮你在自己的节奏里，构建完整的知识体系。</p>
+          <div class="hero-actions">
+            <button class="button button-primary" data-scroll-courses>开始探索 <span>↗</span></button>
+            <button class="button button-ghost" data-open-upload data-upload-only>上传资源 <span>＋</span></button>
+          </div>
+          <div class="hero-stats">
+            <div><strong>2,480<span>+</span></strong><small>优质课程</small></div>
+            <div><strong>18<span>k</span></strong><small>学习伙伴</small></div>
+            <div><strong>96<span>%</span></strong><small>满意度</small></div>
+          </div>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+          <div class="orb orb-main"></div>
+          <div class="orb orb-small"></div>
+          <div class="hero-card hero-card-progress">
+            <span class="mini-label">本周学习进度</span>
+            <strong>4h 28m</strong>
+            <div class="progress-track"><span style="width: 72%"></span></div>
+            <small>比上周多学习 <b>32%</b></small>
+          </div>
+          <div class="hero-card hero-card-note">
+            <span class="note-icon">✦</span><span>保持好奇，持续输入</span>
+          </div>
+          <div class="hero-pattern"></div>
+          <div class="hero-person">✦</div>
+        </div>
+      </section>
+
+      <section class="content-section course-section" id="courses">
+        <div class="section-heading">
+          <div>
+            <span class="section-kicker">CURATED FOR YOU</span>
+            <h2>为你精选的课程</h2>
+          </div>
+          <div class="section-tools">
+            <div class="search-box"><span>⌕</span><input id="search-input" type="search" placeholder="搜索课程、讲师..." /></div>
+            <button class="filter-button" id="filter-button">筛选 <span>☷</span></button>
+          </div>
+        </div>
+        <div class="category-tabs" id="category-tabs">
+          <button class="category-tab active" data-category="全部">全部课程 <span>12</span></button>
+          <button class="category-tab" data-category="设计">设计创意</button>
+          <button class="category-tab" data-category="技术">技术开发</button>
+          <button class="category-tab" data-category="商业">商业思维</button>
+          <button class="category-tab" data-category="人文">人文社科</button>
+        </div>
+        <div class="course-grid" id="course-grid"></div>
+        <div class="empty-state hidden" id="empty-state">
+          <div class="empty-icon">⌕</div><h3>暂时没有找到课程</h3><p>试试其他关键词或切换课程分类吧。</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer"><div class="footer-brand">知行<span>·</span></div><span>让学习，成为一种生活方式</span><span class="footer-copy">© 2024 ZhiXing Learning</span></footer>
+  </div>
+
+  <div class="modal-backdrop hidden" id="auth-modal">
+    <div class="modal auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+      <button class="close-button" data-close-modal>×</button>
+      <div class="auth-intro"><div class="brand auth-brand"><span class="brand-mark">知</span><span>知行<span class="brand-dot">·</span></span></div><h2>和一群热爱学习的人<br /><em>一起成长。</em></h2><p>登录后同步你的学习进度，收藏课程与上传资料。</p><div class="auth-decoration">✦</div></div>
+      <div class="auth-form-wrap">
+        <div class="auth-tabs"><button class="auth-tab active" data-auth-tab="login">登录</button><button class="auth-tab" data-auth-tab="register">注册账号</button></div>
+        <h2 id="auth-title">欢迎回来</h2><p class="form-hint">输入你的账号信息继续学习</p>
+        <form id="auth-form">
+          <label class="field register-only hidden">昵称<input id="auth-name" type="text" placeholder="给自己取一个名字" /></label>
+          <label class="field register-only hidden">角色<select id="auth-role"><option value="student">学生</option><option value="teacher">教师</option></select></label>
+          <label class="field">邮箱<input id="auth-email" type="email" required placeholder="you@example.com" /></label>
+          <label class="field">密码<input id="auth-password" type="password" required minlength="6" placeholder="至少 6 位密码" /></label>
+          <div class="form-error" id="auth-error"></div>
+          <button class="button button-primary full-width" type="submit" id="auth-submit">登录 <span>→</span></button>
+        </form>
+        <p class="form-footnote">继续即表示你同意 <a href="#">服务条款</a> 与 <a href="#">隐私政策</a></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="upload-modal">
+    <div class="modal upload-modal" role="dialog" aria-modal="true" aria-labelledby="upload-title">
+      <button class="close-button" data-close-modal>×</button>
+      <div class="modal-heading"><span class="section-kicker">SHARE KNOWLEDGE</span><h2 id="upload-title">上传学习资源</h2><p>把你的知识整理成课程，分享给更多学习伙伴。</p></div>
+      <form id="upload-form">
+        <label class="field">课程名称<input id="course-title" required type="text" placeholder="例如：从零开始学品牌设计" /></label>
+        <div class="two-fields"><label class="field">课程分类<select id="course-category"><option>设计</option><option>技术</option><option>商业</option><option>人文</option></select></label><label class="field">资源类型<select id="course-type"><option value="pdf">PDF 文档</option><option value="video">视频课程</option><option value="ppt">PPT 演示</option><option value="word">Word 文档</option></select></label></div>
+        <label class="field">课程简介<textarea id="course-description" rows="3" placeholder="简单介绍这门课程的内容..."></textarea></label>
+        <label class="file-drop" for="course-file"><span class="upload-icon">↑</span><strong>点击选择文件或拖拽到这里</strong><small>支持 Word、PDF、PPT、MP4，单个文件不超过 500MB</small><input id="course-file" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.mp4,.mov" /></label>
+        <div class="selected-file hidden" id="selected-file"><span>▧</span><span id="file-name"></span><button type="button" id="remove-file">×</button></div>
+        <div class="form-error" id="upload-error"></div>
+        <button class="button button-primary full-width" type="submit">发布课程 <span>↗</span></button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="course-modal">
+    <div class="modal course-detail-modal" role="dialog" aria-modal="true" aria-labelledby="course-detail-title">
+      <button class="close-button" data-close-modal>×</button>
+      <div class="detail-cover" id="detail-cover"><span class="cover-label" id="detail-badge"></span><div class="cover-shape"></div></div>
+      <div class="detail-content">
+        <span class="section-kicker" id="detail-category"></span>
+        <h2 id="course-detail-title"></h2>
+        <p id="detail-description"></p>
+        <div class="detail-meta"><span id="detail-author"></span><span id="detail-duration"></span><span id="detail-type"></span><span id="detail-learners"></span></div>
+        <button class="button button-primary full-width" id="start-learning">开始学习 <span>→</span></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="profile-modal">
+    <div class="modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+      <button class="close-button" data-close-modal>×</button>
+      <div class="modal-heading"><span class="section-kicker">YOUR ACCOUNT</span><h2 id="profile-title">个人账号</h2><p>管理你的个人资料和登录安全。</p></div>
+      <div class="profile-avatar-row"><div class="profile-avatar" id="profile-avatar">游</div><label class="button button-ghost avatar-picker">更换头像<input id="profile-avatar-file" type="file" accept=".jpg,.jpeg,.png,.gif,.webp" /></label></div>
+      <form id="profile-form"><label class="field">昵称<input id="profile-name" required maxlength="40" /></label><label class="field">邮箱<input id="profile-email" disabled /></label><div class="form-error" id="profile-error"></div><button class="button button-primary full-width" type="submit">保存个人资料</button></form>
+      <form id="password-form" class="password-form"><h3>修改密码</h3><label class="field">当前密码<input id="current-password" type="password" required /></label><label class="field">新密码<input id="new-password" type="password" minlength="6" required /></label><div class="form-error" id="password-error"></div><button class="button button-ghost full-width" type="submit">更新密码</button></form>
+      <button class="button button-ghost full-width logout-button" id="profile-logout">退出登录</button>
+      <button class="button button-ghost full-width account-delete-button" id="profile-delete-account">注销账号</button>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="learning-modal">
+    <div class="modal learning-modal" role="dialog" aria-modal="true" aria-labelledby="learning-title">
+      <button class="close-button" data-close-modal>×</button>
+      <div class="modal-heading"><span class="section-kicker">MY SPACE</span><h2 id="learning-title">我的学习</h2><p id="learning-description">查看你正在学习的课程。</p></div>
+      <div id="space-list" class="space-list"></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="learners-modal">
+    <div class="modal learning-modal" role="dialog" aria-modal="true" aria-labelledby="learners-title">
+      <button class="close-button" data-close-modal>×</button>
+      <div class="modal-heading"><span class="section-kicker">COURSE MEMBERS</span><h2 id="learners-title">学习人员</h2><p id="learners-description"></p></div>
+      <div id="learners-list" class="space-list"></div>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"><span>✓</span><span id="toast-message">操作成功</span></div>
+  <script src="app.js"></script>
+</body>
+</html>
