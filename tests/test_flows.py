@@ -16,10 +16,16 @@ def client(tmp_path, monkeypatch):
         pytest.skip("Set TEST_DATABASE_URL to a separate PostgreSQL test database")
     schema = "test_" + uuid4().hex
     connect = psycopg.connect
+
+    class IsolatedConnection(psycopg.Connection):
+        def execute(self, query, params=None, **kwargs):
+            # Transaction poolers may change sessions after commit/rollback.
+            # Reapply the test-only search path inside every transaction.
+            super().execute(sql.SQL("SET LOCAL search_path TO {}").format(sql.Identifier(schema)))
+            return super().execute(query, params, **kwargs)
+
     def isolated_connect(*args, **kwargs):
-        connection = connect(database_url, row_factory=dict_row)
-        connection.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
-        return connection
+        return IsolatedConnection.connect(database_url, row_factory=dict_row, connect_timeout=15)
     monkeypatch.setattr(platform, "DATABASE_URL", database_url)
     monkeypatch.setattr(platform.psycopg, "connect", isolated_connect)
     monkeypatch.setattr(platform, "ADMIN_PASSWORD", "test-admin-password")
@@ -32,6 +38,7 @@ def client(tmp_path, monkeypatch):
             with platform.app.app_context():
                 platform.initialize_database()
                 initialize_prototype(platform.get_db())
+                assert platform.get_db().execute("SELECT current_schema() AS name").fetchone()["name"] == schema
             yield platform.app.test_client()
         finally:
             control.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
