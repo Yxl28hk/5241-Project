@@ -1,76 +1,115 @@
-# 知行学习平台
+# 知行学习平台 · Week 8 Prototype
 
-这是一个使用 **Python Flask + Neon PostgreSQL + HTML/CSS/JavaScript** 构建的学习平台示例。
+保留 **Flask + Neon PostgreSQL + HTML/CSS/JavaScript**，增加软件工程学习路径、课程内学习助手和可玩的发布事故模拟。不需要前端构建工具。
 
-## 启动项目
+## 运行：Neon PostgreSQL
 
-在项目目录打开 PowerShell：
+Python 3.10+，在项目目录打开 PowerShell：
 
 ```powershell
-python -m pip install -r requirements.txt
-
-# 首次使用时编辑 .env，把 Neon 控制台 Connect 页面中的连接字符串填入 DATABASE_URL
-python app.py
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+# 编辑 .env，填写 DATABASE_URL、随机 ZHIXING_SECRET_KEY 和管理员密码。
+.\.venv\Scripts\python.exe app.py
 ```
 
-然后访问 <http://127.0.0.1:5000>。
+打开 <http://127.0.0.1:5000>。必须先配置数据库 URL；不再提供本地 SQLite 快速演示或自动测试账号。学生和教师通过注册创建账号；管理员由环境配置创建，已有账号密码不会被重置。
 
-首次启动会自动在 Neon 数据库中创建：
+读取项目根目录 `.env`，已有环境变量优先。Neon URL 保留 `sslmode=require`。启动创建缺失表并添加三节短课，不清空旧账号、课程或学习记录。旧的六门示例课只在课程表为空时添加。
 
-- `users`、`courses`、`learning_records`：应用数据表
-- `uploads/`：课程文件保存目录
+Flask CLI / WSGI 启动前先初始化：
 
-应用会自动读取项目根目录的 `.env`，不需要每次启动时重复设置环境变量。
-`DATABASE_URL` 是必需配置，建议使用 Neon 的 pooled connection string，并保留
-`sslmode=require`。`.env` 已加入 Git 忽略规则，不要把真实连接字符串提交到 Git。
-可以参考 [.env.example](C:/Users/31033/OneDrive/Desktop/学习/5241-Project/.env.example)
-填写本地 `.env`。
+```powershell
+.\.venv\Scripts\python.exe -m flask --app app init-db
+.\.venv\Scripts\python.exe -m flask --app app run
+```
 
-## 已提供的后端接口
+初始化已移出模块 import 阶段。多 worker 部署应单独执行一次初始化。Flask 内置服务仅用于本地演示。
 
-- `POST /api/auth/register`：注册
-- `POST /api/auth/login`：登录
-- `POST /api/auth/logout`：退出登录
-- `GET /api/auth/me`：获取当前登录用户
-- `PATCH /api/profile`：修改昵称和头像
-- `PATCH /api/profile/password`：修改密码
-- `DELETE /api/profile`：注销当前账号，同时删除其学习记录、上传课程及课程文件
-- `GET /api/courses?q=&category=`：搜索和筛选课程
-- `POST /api/courses`：登录后上传课程和资源文件
-- `GET /api/profile/courses`：普通用户查看自己上传的课程，管理员查看平台全部课程
-- `GET /api/profile/learning`：查看当前用户正在学习的课程
-- `POST /api/courses/<id>/learn`：将课程加入学习记录
-- `DELETE /api/profile/learning/<id>`：停止学习当前用户列表中的课程
-- `GET /api/courses/<id>/learners`：教师查看自己课程、管理员查看任意课程的学习人员（仅返回昵称、进度和更新时间）
-- `DELETE /api/courses/<id>/learners/<user_id>`：教师或管理员移除课程学习记录，不会删除用户账号
-- `DELETE /api/courses/<id>`：删除当前用户自己上传的课程及其文件
-- `GET /api/admin/users`：管理员查看所有账户、教师创建的课程和学生学习记录
+| 环境变量 | 用途 |
+| --- | --- |
+| `DATABASE_URL` | 必填；Neon PostgreSQL connection string |
+| `ZHIXING_SECRET_KEY` | 固定随机 session 密钥；未配置时生成临时密钥，重启登录失效 |
+| `ZHIXING_ADMIN_EMAIL` | 默认 `admin@zhixing.com` |
+| `ZHIXING_ADMIN_PASSWORD` | 新建管理员时需设置；不设置则不创建管理员。已有密码不自动更新 |
+| `TEST_DATABASE_URL` | 可选；独立 PostgreSQL 测试库，不能使用团队共享库 |
+| `PORT` | `app.py` 端口，默认 `5000` |
 
-## 账号角色
+`.env`、数据库、上传文件和虚拟环境不提交。当前 Tutor 不调用外部 API，无需 key；以后接入真实模型时，key 必须只从后端环境变量读取，不能放进 JS、源码或 Git。
 
-- 学生：只能浏览和学习课程，不能上传或管理课程资源
-- 教师：可以上传、查看和管理自己上传的课程
-- 管理员：拥有平台全部资源管理权限，也可以上传课程
+### 团队共享数据库与文件
 
-## 管理员账号
+团队成员在各自本地 `.env` 中配置指向同一个 Neon 数据库和 schema 的 `DATABASE_URL` 后，会读写同一份账号、课程、学习进度和任务记录。页面上的注册、上传课程记录、更新进度和删除操作会影响共享数据；本地运行并不意味着数据只保存在本机。
 
-首次启动会自动创建管理员账号。默认开发环境账号为：
+课程附件和头像仍保存在运行服务的本机文件目录，数据库只保存相关信息及文件路径。共享数据库或拉取 GitHub 代码不会同步这些文件，因此其他电脑可能看得到课程却打不开附件。多人演示建议使用同一个运行实例和文件目录；正式部署再接入对象存储等共享文件服务。
+
+拿到此分支后按上面的步骤安装依赖并配置自己的 `.env`。仓库不会携带数据库密码、session 密钥或上传文件。若使用已初始化的团队数据库，可直接执行 `python -m flask --app app run`；新数据库先执行 `python -m flask --app app init-db`。初始化会补充课程和按环境配置处理管理员账号，应由团队统一安排。
+
+## 已实现
+
+- **Learning path**：Git/PR → 测试与 CI → 安全发布；每节进度、完成数、总进度和推荐下一节。推荐是第一节未完成的课，不是 AI 推荐。
+- **课程学习页**：内置短课、检查问题、打开上传资源、主动记录 0/50/100% 进度。进度是学生自评，不是考试成绩或自动计时。
+- **AI Learning Assistant 演示**：明确标为规则式助手（非大模型）；结合课程和进度提供知识卡、提示、下一步。自由提问映射预设规则，不读取上传 PDF/视频，聊天不持久化。
+- **Release Rescue**：四个情境决策，每步 25 分，75 分通过；错误解释、最终结果、历史最高分、刷新续玩和重试。后端计分，忽略客户端分数，重复步骤返回冲突。
+- **兼容原有功能**：学生学习；教师上传/管理自己课程和学习者；管理员查看全部课程、账户和记录；昵称头像密码、停止学习、删除课程、注销账号。
+- **关联修复**：只允许指定前端静态文件，避免暴露根目录；登录响应移除密码哈希；修改资料后保留角色；正式模式取消固定默认管理员密码；关闭默认 debug；首页移除虚构统计。
+
+## 代码结构
 
 ```text
-邮箱：admin@zhixing.com
-密码：Admin@123456
+app.py                  原有 Flask 路由、角色权限、数据库连接和启动
+index.html              单页 UI 和各功能弹窗
+app.js / styles.css     原有账号、课程、教师和管理员交互与样式
+prototype.py            学习路径、进度、Tutor、任务 API 和新增表
+learning_content.py     三节短课、四步任务、反馈和评分规则
+prototype.js / .css     新增学习路径、课程、Tutor 和任务 UI
+tests/                 PostgreSQL 流程测试与无需数据库的配置测试
+uploads/                原有本地文件存储
+docs/                   架构、演示脚本和验证记录
 ```
 
-生产环境请在启动前设置自己的管理员配置：
+完整分析见 [架构梳理](docs/ARCHITECTURE.md)。原表 `users`、`courses`、`learning_records` 保留；新增 `prototype_courses` 映射短课到原课程，`mission_attempts` 保存个人任务记录。教师/管理员查询继续读取同一份学习记录。管理员删除内置短课后，下次初始化会补回。
+
+## 接口
+
+| 新接口 | 用途 |
+| --- | --- |
+| `GET /api/prototype/config` | 环境和 Tutor 模式，不返回密钥 |
+| `GET /api/learning-path` | 当前账号路径和任务结果；需登录 |
+| `PATCH /api/courses/<id>/progress` | `{"progress":50}`；仅自己的已加入课程 |
+| `POST /api/tutor` | `{"course_id":7,"message":"给我提示"}`；需登录，问题 1–1000 字 |
+| `POST /api/missions/release-rescue/start` | 创建或恢复个人任务 |
+| `POST /api/missions/attempts/<id>/answer` | `{"step":0,"choice_id":"pr"}`；校验归属和步骤 |
+
+原有接口继续提供：
+
+- `POST /api/auth/register`、`/api/auth/login`、`/api/auth/logout`，`GET /api/auth/me`。
+- `PATCH/DELETE /api/profile`、`PATCH /api/profile/password`。
+- `GET/POST /api/courses`、`DELETE /api/courses/<id>`。
+- `GET /api/profile/courses`、`GET /api/profile/learning`。
+- `POST /api/courses/<id>/learn`、`DELETE /api/profile/learning/<id>`。
+- `GET /api/courses/<id>/learners`、`DELETE /api/courses/<id>/learners/<user_id>`。
+- `GET /api/admin/users`、`GET /uploads/<filename>`、`GET /avatars/<filename>`。
+
+上传只允许教师/管理员，教师只管理自己的课程；管理员管理全部课程。文件继续支持 PDF、Word、PPT、MP4、MOV，上限 500MB。旧示例课无附件，新短课有内置正文，上传课程有打开文件入口。
+
+## 测试与演示
 
 ```powershell
-$env:ZHIXING_ADMIN_EMAIL="your-admin@example.com"
-$env:ZHIXING_ADMIN_PASSWORD="your-strong-password"
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest -q
+node --check app.js
+node --check prototype.js
 ```
 
-管理员登录后可以在“资源管理”中查看平台全部课程并删除任意课程；普通用户只能查看和删除自己上传的课程。删除课程时，也会删除该课程的学习记录和上传文件。
-- `GET /uploads/<filename>`：访问已上传资源
+配置测试无需数据库。13 项流程测试需要显式设置 `TEST_DATABASE_URL`，未配置则跳过，绝不自动使用 `DATABASE_URL`。请使用独立 Neon 测试分支（账号需可创建 schema）；每个测试创建随机 schema，结束时只删除该 schema。结果见 [验证记录](docs/VALIDATION.md)，课堂演示见 [5–7 分钟脚本](docs/WEEK8_DEMO.md)。
 
-## 上传限制
+2026-10-17 已完成 Neon 联调：**16 项测试通过**（3 项配置测试、13 项流程测试）。该次流程测试使用随机隔离 schema，未对既有业务表做写入或删除测试；这不等同于完整浏览器验收或生产安全审核。后续重复测试仍应使用独立测试数据库。
 
-支持 PDF、Word、PPT、MP4 和 MOV，单个文件最大 500MB。生产环境部署时请设置随机的 `ZHIXING_SECRET_KEY` 环境变量，并使用 HTTPS。
+## 下一步
+
+1. 在独立测试环境补齐多人浏览器验收和跨设备附件访问验证。
+2. 在 `/api/tutor` 后端接入真实模型、课程检索、超时降级和限流。
+3. 增加客观检查题、教师任务成绩面板、更多分支情境和学习效果评估。
+4. 正式上线前补齐 CSRF、教师审核、文件私有访问/内容校验、对象存储、数据库迁移和生产服务器；当前是课堂 prototype。

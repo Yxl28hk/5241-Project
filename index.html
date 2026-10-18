@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;800;900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="prototype.css" />
 </head>
 <body>
   <div class="app-shell">
@@ -20,6 +21,7 @@
       <nav class="main-nav" aria-label="主导航">
         <button class="nav-link active" data-view="explore">发现课程</button>
         <button class="nav-link" data-view="my-learning">我的学习</button>
+        <button class="nav-link" id="path-nav" data-view="path">学习路径</button>
         <button class="nav-link" data-view="uploads" data-upload-only>资源管理</button>
         <button class="nav-link hidden" data-view="admin-users" data-admin-only>账户数据</button>
       </nav>
@@ -46,19 +48,18 @@
             <button class="button button-ghost" data-open-upload data-upload-only>上传资源 <span>＋</span></button>
           </div>
           <div class="hero-stats">
-            <div><strong>2,480<span>+</span></strong><small>优质课程</small></div>
-            <div><strong>18<span>k</span></strong><small>学习伙伴</small></div>
-            <div><strong>96<span>%</span></strong><small>满意度</small></div>
+            <div><strong>03</strong><small>软件工程短课</small></div>
+            <div><strong>04</strong><small>真实情境决策</small></div>
+            <div><strong>01</strong><small>学习到实践的旅程</small></div>
           </div>
         </div>
         <div class="hero-visual" aria-hidden="true">
           <div class="orb orb-main"></div>
           <div class="orb orb-small"></div>
           <div class="hero-card hero-card-progress">
-            <span class="mini-label">本周学习进度</span>
-            <strong>4h 28m</strong>
-            <div class="progress-track"><span style="width: 72%"></span></div>
-            <small>比上周多学习 <b>32%</b></small>
+            <span class="mini-label">WEEK 8 · LEARNING LAB</span>
+            <strong>Learn → Build</strong>
+            <small>课程 · 提示 · 决策 · 反馈</small>
           </div>
           <div class="hero-card hero-card-note">
             <span class="note-icon">✦</span><span>保持好奇，持续输入</span>
@@ -66,6 +67,12 @@
           <div class="hero-pattern"></div>
           <div class="hero-person">✦</div>
         </div>
+      </section>
+
+      <section class="week8-section" id="learning-path" aria-labelledby="path-title">
+        <div class="week8-heading"><div><span class="section-kicker">WEEK 8 / SOFTWARE ENGINEERING LAB</span><h2 id="path-title">从理解，到一次安全发布。</h2><p>跟随学习路径，向助手提问，再用一次真实情境挑战检验理解。</p><span class="environment-label" id="learning-environment">正在连接学习环境…</span></div><button class="button button-ghost" id="path-refresh">刷新进度 ↻</button></div>
+        <div class="path-total"><p id="path-summary" aria-live="polite">正在加载学习路径…</p><progress id="path-progress" max="100" value="0" aria-label="学习路径总进度"></progress></div>
+        <div class="journey-layout"><div class="path-list" id="path-list"></div><aside class="mission-card"><span class="section-kicker">PUT IT INTO PRACTICE</span><div class="mission-icon" aria-hidden="true">⌘</div><h3>Release Rescue</h3><strong>拯救周五发布</strong><p>登录异常、红色 CI、上线事故。你将如何带领团队完成一次安全发布？</p><p>4 个决策 · 约 3 分钟 · 75 分通过<br>可随时挑战，建议先完成左侧课程。</p><small id="mission-best">尚未开始</small><button class="button" id="mission-start">开始 / 继续挑战 ↗</button></aside></div>
       </section>
 
       <section class="content-section course-section" id="courses">
@@ -76,7 +83,6 @@
           </div>
           <div class="section-tools">
             <div class="search-box"><span>⌕</span><input id="search-input" type="search" placeholder="搜索课程、讲师..." /></div>
-            <button class="filter-button" id="filter-button">筛选 <span>☷</span></button>
           </div>
         </div>
         <div class="category-tabs" id="category-tabs">
@@ -182,7 +188,10 @@
     </div>
   </div>
 
-  <div class="toast hidden" id="toast"><span>✓</span><span id="toast-message">操作成功</span></div>
+  <div class="modal-backdrop hidden" id="lesson-modal"><div class="modal lesson-modal" role="dialog" aria-modal="true" aria-labelledby="lesson-title"><button class="close-button" data-close-modal aria-label="关闭学习页面">×</button><span class="section-kicker">LEARN / REFLECT / APPLY</span><h2 id="lesson-title"></h2><div class="lesson-layout"><section class="lesson-reading"><p id="lesson-copy"></p><a class="button button-ghost hidden" id="lesson-resource" target="_blank" rel="noopener">打开课程资源 ↗</a><div class="reflection"><strong>停下来想一想</strong><p id="lesson-question"></p></div><p id="lesson-progress" aria-live="polite"></p><div class="lesson-actions"><button class="button button-ghost" data-save-progress="50">已阅读 · 50%</button><button class="button button-primary" data-save-progress="100">已理解 · 标记完成</button><button class="button button-ghost" data-save-progress="0">重置进度</button></div></section><aside class="tutor-panel"><h3>AI Learning Assistant</h3><small>演示模式 · 规则式学习助手（非大模型）<br>根据课程与进度提供预设提示，不读取上传文件。</small><p id="tutor-context"></p><div class="tutor-messages" id="tutor-messages" aria-live="polite"></div><div class="prompt-chips"><button data-tutor-prompt="给我一个提示">给我提示</button><button data-tutor-prompt="解释本课知识">解释本课</button><button data-tutor-prompt="下一步怎么学？">下一步</button></div><form id="tutor-form"><label class="field">你的问题<textarea id="tutor-question" required maxlength="1000" rows="3" placeholder="例如：为什么 CI 失败后不能直接合并？"></textarea></label><button class="button button-primary full-width" id="tutor-send">发送问题 →</button></form></aside></div></div></div>
+  <div class="modal-backdrop hidden" id="mission-modal"><div class="modal mission-modal" role="dialog" aria-modal="true" aria-labelledby="mission-scene-title"><button class="close-button" data-close-modal aria-label="关闭任务">×</button><span class="section-kicker">RELEASE RESCUE / INTERACTIVE MISSION</span><p id="mission-status" aria-live="polite"></p><progress id="mission-progress" max="4" value="0" aria-label="任务进度"></progress><h2 id="mission-scene-title"></h2><p id="mission-scenario"></p><div class="mission-choices" id="mission-choices"></div><button class="button button-primary hidden" id="mission-retry">再挑战一次 ↻</button><div class="mission-history" id="mission-history" aria-live="polite"></div></div></div>
+  <div class="toast hidden" id="toast" role="status"><span>✓</span><span id="toast-message">操作成功</span></div>
   <script src="app.js"></script>
+  <script src="prototype.js"></script>
 </body>
 </html>

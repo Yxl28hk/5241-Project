@@ -37,6 +37,7 @@ function updateUserUI() {
     $("#user-avatar").textContent = "";
     $("#profile-avatar").textContent = "";
   }
+  if (typeof refreshPath === "function") refreshPath();
 }
 function requireLogin(action) {
   if (!state.user) { openModal("#auth-modal"); showToast(`请先登录后再${action}`); return false; }
@@ -78,7 +79,7 @@ function openCourse(course) {
   $("#detail-learners").textContent = `学习人数 ${course.learner_count || 0}`;
   $("#start-learning").onclick = async () => {
     if (!requireLogin("开始学习")) return;
-    try { await api(`/api/courses/${course.id}/learn`, { method: "POST" }); closeModals(); showToast(`已开始学习《${course.title}》`); }
+    try { await openLesson(course.id); }
     catch (error) { showToast(error.message); }
   };
   openModal("#course-modal");
