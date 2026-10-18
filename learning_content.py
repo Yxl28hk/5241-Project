@@ -1,4 +1,8 @@
-"""Versioned classroom content, shared by the path, tutor and mission."""
+"""Compatibility adapter for built-in learning content.
+
+The canonical import path is ``app.models.content``. Keeping the definitions
+here preserves the existing public module used by deployments and tests.
+"""
 MODULES = [
     {"slug": "git-pr", "title": "01 · Git 分支与 Pull Request", "duration": "5 分钟",
      "description": "从一个小需求出发，用分支、提交和代码评审协作。",

@@ -11,7 +11,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 # 编辑 .env，填写 DATABASE_URL、随机 ZHIXING_SECRET_KEY 和管理员密码。
-.\.venv\Scripts\python.exe app.py
+.\.venv\Scripts\python.exe run.py
 ```
 
 打开 <http://127.0.0.1:5000>。必须先配置数据库 URL；不再提供本地 SQLite 快速演示或自动测试账号。学生和教师通过注册创建账号；管理员由环境配置创建，已有账号密码不会被重置。
@@ -21,8 +21,8 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 Flask CLI / WSGI 启动前先初始化：
 
 ```powershell
-.\.venv\Scripts\python.exe -m flask --app app init-db
-.\.venv\Scripts\python.exe -m flask --app app run
+.\.venv\Scripts\python.exe -m flask --app run init-db
+.\.venv\Scripts\python.exe -m flask --app run run
 ```
 
 初始化已移出模块 import 阶段。多 worker 部署应单独执行一次初始化。Flask 内置服务仅用于本地演示。
@@ -34,7 +34,7 @@ Flask CLI / WSGI 启动前先初始化：
 | `ZHIXING_ADMIN_EMAIL` | 默认 `admin@zhixing.com` |
 | `ZHIXING_ADMIN_PASSWORD` | 新建管理员时需设置；不设置则不创建管理员。已有密码不自动更新 |
 | `TEST_DATABASE_URL` | 可选；独立 PostgreSQL 测试库，不能使用团队共享库 |
-| `PORT` | `app.py` 端口，默认 `5000` |
+| `PORT` | `run.py` 端口，默认 `5000` |
 
 `.env`、数据库、上传文件和虚拟环境不提交。当前 Tutor 不调用外部 API，无需 key；以后接入真实模型时，key 必须只从后端环境变量读取，不能放进 JS、源码或 Git。
 
@@ -44,7 +44,7 @@ Flask CLI / WSGI 启动前先初始化：
 
 课程附件和头像仍保存在运行服务的本机文件目录，数据库只保存相关信息及文件路径。共享数据库或拉取 GitHub 代码不会同步这些文件，因此其他电脑可能看得到课程却打不开附件。多人演示建议使用同一个运行实例和文件目录；正式部署再接入对象存储等共享文件服务。
 
-拿到此分支后按上面的步骤安装依赖并配置自己的 `.env`。仓库不会携带数据库密码、session 密钥或上传文件。若使用已初始化的团队数据库，可直接执行 `python -m flask --app app run`；新数据库先执行 `python -m flask --app app init-db`。初始化会补充课程和按环境配置处理管理员账号，应由团队统一安排。
+拿到此分支后按上面的步骤安装依赖并配置自己的 `.env`。仓库不会携带数据库密码、session 密钥或上传文件。若使用已初始化的团队数据库，可直接执行 `python -m flask --app run run`；新数据库先执行 `python -m flask --app run init-db`。初始化会补充课程和按环境配置处理管理员账号，应由团队统一安排。
 
 ## 已实现
 
@@ -58,11 +58,16 @@ Flask CLI / WSGI 启动前先初始化：
 ## 代码结构
 
 ```text
-app.py                  原有 Flask 路由、角色权限、数据库连接和启动
+run.py                  Flask 启动入口与现有兼容路由
+config.py               环境变量、路径和上传限制配置
+app/
+  models/content.py     内置学习路径与任务内容
+  routes/prototype.py   学习路径、Tutor 和任务路由适配器
+  utils/files.py        文件扩展名校验工具
 index.html              单页 UI 和各功能弹窗
 app.js / styles.css     原有账号、课程、教师和管理员交互与样式
-prototype.py            学习路径、进度、Tutor、任务 API 和新增表
-learning_content.py     三节短课、四步任务、反馈和评分规则
+prototype.py            兼容导入层（实现位于 app/routes/prototype.py）
+learning_content.py     兼容导入层（内容位于 app/models/content.py）
 prototype.js / .css     新增学习路径、课程、Tutor 和任务 UI
 tests/                 PostgreSQL 流程测试与无需数据库的配置测试
 uploads/                原有本地文件存储

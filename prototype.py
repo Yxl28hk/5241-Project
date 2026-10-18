@@ -1,7 +1,13 @@
-"""Additive Week 8 routes. Scores and progress are persisted per signed-in user."""
+"""Compatibility adapter for the learning-path route module.
+
+The implementation now lives under ``app.routes``; this module remains so
+existing imports and deployments continue to work.
+"""
+
+from app.models.content import MODULES, MISSION
+
 import json
 from flask import jsonify, request, session
-from learning_content import MODULES, MISSION
 
 
 def initialize_prototype(db):

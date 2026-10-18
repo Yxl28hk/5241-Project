@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import os
 from functools import wraps
 from pathlib import Path
-from secrets import token_hex
 from typing import Any, Mapping
 
 from flask import Flask, g, jsonify, request, send_from_directory, session
-from dotenv import load_dotenv
 import psycopg
 from psycopg import Connection
 from psycopg.rows import dict_row
@@ -16,19 +13,21 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 
-BASE_DIR = Path(__file__).resolve().parent
-load_dotenv(BASE_DIR / ".env")
-DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
-UPLOAD_FOLDER = BASE_DIR / "uploads"
-ALLOWED_EXTENSIONS = {"pdf", "doc", "docx", "ppt", "pptx", "mp4", "mov"}
-AVATAR_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
-MAX_FILE_SIZE = 500 * 1024 * 1024
-ADMIN_EMAIL = os.environ.get("ZHIXING_ADMIN_EMAIL", "admin@zhixing.com").strip().lower()
-ADMIN_PASSWORD = os.environ.get("ZHIXING_ADMIN_PASSWORD", "")
+from config import (
+    ADMIN_EMAIL,
+    ADMIN_PASSWORD,
+    ALLOWED_EXTENSIONS,
+    AVATAR_EXTENSIONS,
+    BASE_DIR,
+    DATABASE_URL,
+    MAX_FILE_SIZE,
+    SECRET_KEY,
+    UPLOAD_FOLDER,
+)
 
 app = Flask(__name__, static_folder=None)
 app.config.update(
-    SECRET_KEY=os.environ.get("ZHIXING_SECRET_KEY") or token_hex(32),
+    SECRET_KEY=SECRET_KEY,
     MAX_CONTENT_LENGTH=MAX_FILE_SIZE,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -557,7 +556,7 @@ def avatar_file(filename: str):
     return send_from_directory(UPLOAD_FOLDER, filename)
 
 
-from prototype import register_prototype, initialize_prototype
+from app.routes.prototype import register_prototype, initialize_prototype
 register_prototype(app, get_db, login_required)
 
 
@@ -573,4 +572,4 @@ if __name__ == "__main__":
     with app.app_context():
         initialize_database()
         initialize_prototype(get_db())
-    app.run(host="127.0.0.1", port=int(os.environ.get("PORT", "5000")), debug=False)
+    app.run(host="127.0.0.1", port=int(__import__("os").environ.get("PORT", "5000")), debug=False)
