@@ -50,6 +50,31 @@ def register(client, email="student@example.test", role="student"):
     return client.post("/api/auth/register", json={"name":"Test Learner", "email":email, "password":"password123", "role":role})
 
 
+def test_migrations_adopt_existing_schema_and_preserve_user_data(client):
+    from app.infrastructure.migrations import ALL, apply_migrations
+
+    user_id = register(client).json["user"]["id"]
+    course_id = client.get("/api/learning-path").json["modules"][0]["id"]
+    client.post(f"/api/courses/{course_id}/learn")
+    client.patch(f"/api/courses/{course_id}/progress", json={"progress": 100})
+    with platform.app.app_context():
+        db = platform.get_db()
+        assert len(db.execute("SELECT version FROM schema_migrations").fetchall()) == len(ALL)
+        assert apply_migrations(db) == []
+        # Simulate an installation with existing business tables but no migration history.
+        db.execute("DELETE FROM schema_migrations")
+        assert apply_migrations(db) == list(ALL)
+        db.commit()
+        assert db.execute("SELECT id FROM users WHERE id=%s", (user_id,)).fetchone()
+        assert db.execute(
+            "SELECT progress FROM learning_records WHERE user_id=%s AND course_id=%s",
+            (user_id, course_id),
+        ).fetchone()["progress"] == 100
+    result = platform.app.test_cli_runner().invoke(args=["migrate"])
+    assert result.exit_code == 0, result.output
+    assert "0 migration(s) applied" in result.output
+
+
 def test_auth_and_static_exposure(client):
     assert client.get("/api/learning-path").status_code == 401
     assert client.post("/api/tutor", json={}).status_code == 401

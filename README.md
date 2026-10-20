@@ -2,6 +2,25 @@
 
 保留 **Flask + Neon PostgreSQL + HTML/CSS/JavaScript**，增加软件工程学习路径、课程内学习助手和可玩的发布事故模拟。不需要前端构建工具。
 
+## 合作者 API 函数入口
+
+现有 API 已统一封装到独立的 [`frontend/api/client.js`](frontend/api/client.js)，页面加载后可直接通过 `zhixingApi` 调用账号、课程、学习路径、笔记、练习、Tutor 和任务函数，无需自己拼接 URL 或处理 JSON / FormData。该模块不依赖页面 DOM，无需 npm 安装；`frontend/features/` 下的业务脚本使用同一套函数。
+
+完整的函数与 HTTP 接口对照、参数、权限、返回值、登录会话、文件上传及版本冲突示例见 **[合作者 API 使用 README](docs/API_README.md)**。
+
+```javascript
+// 在加载 /frontend/api/client.js 后的 async 函数中使用。
+const { user } = await zhixingApi.login({ email: "your-account@example.com", password: "your-password" });
+const { courses } = await zhixingApi.listCourses({ category: "技术" });
+if (courses.length) {
+  await zhixingApi.startLearning(courses[0].id);
+  const { lesson } = await zhixingApi.getLesson(courses[0].id);
+  console.log(user.name, lesson.title);
+}
+```
+
+客户端验证：`node --test tests/api.test.js`（Node 18+，模拟请求，无需数据库）。项目服务本身仍只需下方 Python 环境。
+
 ## 运行：Neon PostgreSQL
 
 Python 3.10+，在项目目录打开 PowerShell：
@@ -65,29 +84,50 @@ Flask CLI / WSGI 启动前先初始化：
 ## 代码结构
 
 ```text
-run.py                  Flask 启动入口与现有兼容路由
-config.py               环境变量、路径和上传限制配置
+run.py                       Flask CLI / WSGI / 本地启动入口
+config.py                    环境变量和默认配置
+frontend/
+  index.html                 页面入口
+  api/client.js              全部 API 调用函数
+  components/ui.js           弹窗、提示、DOM 与文本转义工具
+  features/
+    state.js                 页面共享状态
+    auth/account.js          账号、个人资料、管理员界面
+    courses/catalog.js       课程发现、上传和学习人员管理
+    learning/                路径、课时、笔记和练习
+    tutor/                   助手面板、持久会话和提问
+    missions/release-rescue.js
+    navigation.js            导航事件
+    bootstrap.js             页面初始化
+  styles/                    页面及学习空间样式
 app/
-  models/content.py     内置学习路径与任务内容
-  routes/prototype.py   原学习路径、Tutor 和任务路由导入适配器
-  routes/learning.py    画像、路径选择、课时内容接口
-  models/learner.py     路径模板、推荐、学习快照与增量表结构
-  models/tutor.py       知识卡与可选真实 AI 适配
-  models/study.py       固定练习、选段定位与笔记/会话表结构
-  routes/study.py       练习、账号笔记、会话恢复与持久化答疑
-  utils/files.py        文件扩展名校验工具
-index.html              单页 UI 和各功能弹窗
-app.js / styles.css     原有账号、课程、教师和管理员交互与样式
-prototype.py            原学习路径、进度、Tutor 与任务路由实现
-learning_content.py     三节内置短课与发布任务定义
-prototype.js / .css     新增学习路径、课程、Tutor 和任务 UI
-study.js                固定练习、段落提问、账号笔记与会话恢复
-tests/                 PostgreSQL 流程测试与无需数据库的配置测试
-uploads/                原有本地文件存储
-docs/                   架构、演示脚本和验证记录
+  factory.py                 create_app、蓝图组装和 CLI
+  auth/                      账号与角色权限
+  courses/                   课程及学习人员管理
+  learning/                  路径、进度、笔记、练习与内置内容
+  tutor/                     答疑与会话
+  missions/                  情境任务和计分
+  infrastructure/            数据库、文件、模型适配、迁移与静态文件
+  models/                    旧 Python 导入路径的兼容导出
+migrations/                  有编号的增量 SQL 迁移
+tests/                       API 客户端、架构及 PostgreSQL 流程测试
+docs/                        架构、接入指南、演示及验证记录
+uploads/                     运行时本地附件，不提交
+prototype.py                 旧初始化导入的兼容层
+learning_content.py          旧内容导入的兼容层
 ```
 
 完整分析见 [架构梳理](docs/ARCHITECTURE.md)。原表 `users`、`courses`、`learning_records` 保留；新增 `prototype_courses` 映射短课到原课程，`mission_attempts` 保存个人任务记录。教师/管理员查询继续读取同一份学习记录。管理员删除内置短课后，下次初始化会补回。
+
+五个业务模块统一采用 `routes.py → service.py → repository.py`：路由负责 HTTP 与 session，服务负责规则及事务，repository 负责 SQL。[协作分工与依赖规则](docs/ARCHITECTURE.md) 说明新增功能应放在哪里。
+
+只升级数据库结构、无需创建管理员或示例课程时，可运行：
+
+```powershell
+.\.venv\Scripts\python.exe -m flask --app run migrate
+```
+
+迁移按文件编号执行，并记录到 `schema_migrations`；已有数据库通过 `IF NOT EXISTS` 接入。新数据库仍可直接执行 `init-db`。新增或修改表结构时增加新的 SQL 文件，详细流程见 [迁移 README](migrations/README.md)。
 
 ## 接口
 
@@ -143,12 +183,21 @@ docs/                   架构、演示脚本和验证记录
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m pytest -q
-node --check app.js
-node --check prototype.js
-node --check study.js
+node --test tests/api.test.js
 ```
 
-配置测试无需数据库。44 项流程测试需要显式设置 `TEST_DATABASE_URL`，未配置则跳过，绝不自动使用 `DATABASE_URL`。请使用独立测试数据库（账号需可创建 schema）；每个测试创建随机 schema，结束时只删除该 schema。2026-10-20 完整回归 47 项通过。结果见 [验证记录](docs/VALIDATION.md)，新功能见 [学习工具说明](docs/STUDY_TOOLS.md)。
+配置及架构测试无需数据库。45 项流程测试需要显式设置 `TEST_DATABASE_URL`，未配置则跳过，绝不自动使用 `DATABASE_URL`。请使用独立测试数据库（账号需可创建 schema）；每个测试创建随机 schema，结束时只删除该 schema。目录重构增加了 HTTP 合约、应用实例隔离、静态资源、权限参数分离及迁移保留数据的验证。结果见 [验证记录](docs/VALIDATION.md)，新功能见 [学习工具说明](docs/STUDY_TOOLS.md)。
+
+浏览器回归为可选测试，使用本地页面与模拟 API，不连接数据库。覆盖课程及账号字段的 HTML 注入，以及新页面、原版三脚本页面、单独加载 API 脚本的过渡页面：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-browser.txt
+$env:RUN_BROWSER_TESTS = "1"
+.\.venv\Scripts\python.exe -m pytest tests/test_frontend_browser.py -q
+Remove-Item Env:RUN_BROWSER_TESTS
+```
+
+Windows 默认使用已安装的 Edge。其他系统默认使用 Playwright Chromium，首次运行前执行 `python -m playwright install chromium`；也可通过 `BROWSER_CHANNEL` 指定已安装的浏览器通道（例如 `chrome`）。未开启 `RUN_BROWSER_TESTS` 时跳过浏览器测试。
 
 2026-10-17 已完成 Neon 联调：**16 项测试通过**（3 项配置测试、13 项流程测试）。该次流程测试使用随机隔离 schema，未对既有业务表做写入或删除测试；这不等同于完整浏览器验收或生产安全审核。后续重复测试仍应使用独立测试数据库。
 
@@ -157,4 +206,4 @@ node --check study.js
 1. 在独立测试环境补齐多人浏览器验收和跨设备附件访问验证。
 2. 配置实际模型提供商并验证回答质量、费用、课程检索与服务端调用限流。
 3. 增加客观检查题、教师任务成绩面板、更多分支情境和学习效果评估。
-4. 正式上线前补齐 CSRF、教师审核、文件私有访问/内容校验、对象存储、数据库迁移和生产服务器；当前是课堂 prototype。
+4. 正式上线前补齐 CSRF、教师审核、文件私有访问/内容校验、对象存储、数据库备份恢复和生产服务器；当前是课堂 prototype。

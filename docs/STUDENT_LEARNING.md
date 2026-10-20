@@ -14,12 +14,14 @@
 
 ## 实现位置
 
-- `app/models/learner.py`：路径模板、推荐规则、学习快照、增量表结构和最近位置。
-- `app/routes/learning.py`：画像、路径确认、课时读取接口。
-- `app/models/tutor.py`：知识卡与可选真实模型适配、历史验证、错误脱敏。
-- `prototype.py`：兼容原有路径、进度、Tutor 与任务路由。
-- `prototype.js` / `prototype.css` / `index.html`：学生工作台、画像和路径弹窗、三栏学习页及响应式布局。
-- `run.py`：保存访问位置、注册新路由、`init-learning` 增量命令。
+- `app/learning/paths.py`：路径模板、推荐规则、学习快照和最近位置。
+- `app/learning/routes.py` / `service.py` / `repository.py`：画像、路径、课时、进度、笔记与练习的接口、业务和 SQL。
+- `app/tutor/` 与 `app/infrastructure/tutor_provider.py`：会话、知识卡与真实模型适配、历史验证、错误脱敏。
+- `app/missions/`：任务接口、步骤校验及计分。
+- `frontend/features/learning/`、`frontend/features/tutor/`、`frontend/styles/`、`frontend/index.html`：学生学习界面及响应式布局。
+- `app/factory.py`、`app/infrastructure/migrations.py`、`migrations/`：应用组装、增量迁移和 CLI；`run.py` 为启动入口。
+
+完整目录及协作分工见 [架构说明](ARCHITECTURE.md)。
 
 ## 升级与演示
 

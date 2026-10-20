@@ -1,5 +1,5 @@
-"""Built-in learning content used by the learning-path feature."""
+"""Legacy content exports."""
 
-from learning_content import MISSION, MODULES
+from app.learning.content import MISSION, MODULES
 
-__all__ = ["MISSION", "MODULES"]
+__all__ = ["MODULES", "MISSION"]

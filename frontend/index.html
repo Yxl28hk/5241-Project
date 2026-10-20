@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
-  <link rel="stylesheet" href="prototype.css" />
+  <link rel="stylesheet" href="/frontend/styles/main.css" />
+  <link rel="stylesheet" href="/frontend/styles/learning.css" />
 </head>
 <body>
   <div class="app-shell">
@@ -219,8 +219,17 @@
   </div></div>
   <div class="modal-backdrop hidden" id="mission-modal"><div class="modal mission-modal" role="dialog" aria-modal="true" aria-labelledby="mission-scene-title"><button class="close-button" data-close-modal aria-label="关闭任务">×</button><span class="section-kicker">RELEASE RESCUE / INTERACTIVE MISSION</span><p id="mission-status" aria-live="polite"></p><progress id="mission-progress" max="4" value="0" aria-label="任务进度"></progress><h2 id="mission-scene-title"></h2><p id="mission-scenario"></p><div class="mission-choices" id="mission-choices"></div><button class="button button-primary hidden" id="mission-retry">再挑战一次 ↻</button><div class="mission-history" id="mission-history" aria-live="polite"></div></div></div>
   <div class="toast hidden" id="toast" role="status"><span>✓</span><span id="toast-message">操作成功</span></div>
-  <script src="app.js"></script>
-  <script src="prototype.js"></script>
-  <script src="study.js"></script>
+  <script src="/frontend/api/client.js"></script>
+  <script src="/frontend/features/state.js"></script>
+  <script src="/frontend/components/ui.js"></script>
+  <script src="/frontend/features/auth/account.js"></script>
+  <script src="/frontend/features/courses/catalog.js"></script>
+  <script src="/frontend/features/navigation.js"></script>
+  <script src="/frontend/features/learning/workspace.js"></script>
+  <script src="/frontend/features/tutor/panel.js"></script>
+  <script src="/frontend/features/missions/release-rescue.js"></script>
+  <script src="/frontend/features/learning/study.js"></script>
+  <script src="/frontend/features/tutor/study.js"></script>
+  <script src="/frontend/features/bootstrap.js"></script>
 </body>
 </html>

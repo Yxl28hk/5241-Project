@@ -1,31 +1,36 @@
-"""Application package and compatibility facade.
+"""Application factory and compatibility exports for existing integrations."""
 
-``run.py`` is the executable entry point. The public Flask objects are
-re-exported here so existing ``import app`` integrations keep working.
-"""
+from flask import current_app, has_app_context
 
-import run as _entrypoint
+import config as _config
+from app.factory import create_app
+from app.infrastructure import database as _database
+from app.infrastructure.migrations import initialize_core
 
-app = _entrypoint.app
-psycopg = _entrypoint.psycopg
-dict_row = _entrypoint.dict_row
+psycopg = _database.psycopg
+dict_row = _database.dict_row
+app = create_app()
 
 
-def _sync_compatibility_settings() -> None:
+def _sync_compatibility_settings():
+    """Honor legacy module overrides; new code configures create_app(settings)."""
+    target = current_app if has_app_context() else app
     for name in ("DATABASE_URL", "ADMIN_PASSWORD", "UPLOAD_FOLDER"):
         if name in globals():
-            setattr(_entrypoint, name, globals()[name])
+            target.config[name] = globals()[name]
 
 
 def get_db():
     _sync_compatibility_settings()
-    return _entrypoint.get_db()
+    return _database.get_db()
 
 
 def initialize_database():
     _sync_compatibility_settings()
-    return _entrypoint.initialize_database()
+    initialize_core(_database.get_db(), current_app.config)
 
 
 def __getattr__(name):
-    return getattr(_entrypoint, name)
+    if hasattr(_config, name):
+        return getattr(_config, name)
+    raise AttributeError(name)

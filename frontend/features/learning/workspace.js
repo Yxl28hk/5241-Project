@@ -1,20 +1,3 @@
-/* Student learning workspace. Account/resource administration remains in app.js. */
-let pathData = null;
-let selectedLesson = null;
-let missionAttempt = null;
-let pathRequestVersion = 0;
-let lessonRequestVersion = 0;
-let lessonOpening = false;
-let progressSaving = false;
-let tutorEpoch = 0;
-let tutorPending = false;
-let tutorController = null;
-let failedQuestion = "";
-let detailPathId = null;
-let pendingProgressValue = null;
-let completionTarget = null;
-const escapeHTML = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"}[c]));
-const jsonRequest = (method, data) => ({method, headers: {"Content-Type": "application/json"}, body: JSON.stringify(data)});
 const goalLabels = {collaboration:"协作开发入门", quality:"测试与发布", engineering:"软件工程实践"};
 const levelLabels = {beginner:"零基础", intermediate:"入门", experienced:"有经验"};
 const statusLabels = {not_started:"未开始", in_progress:"学习中", completed:"已完成"};
@@ -22,28 +5,6 @@ const statusLabels = {not_started:"未开始", in_progress:"学习中", complete
 function lessonStatus(lesson) {
   if (lesson.progress === 100) return "completed";
   return lesson.enrolled || lesson.last_opened_at || lesson.progress > 0 ? "in_progress" : "not_started";
-}
-
-function resetTutor() {
-  tutorEpoch++;
-  tutorController?.abort();
-  tutorController = null;
-  tutorPending = false;
-  failedQuestion = "";
-  $("#tutor-messages").innerHTML = '<p class="supporting-copy">围绕当前课时提问，或试试下面的快捷操作。</p>';
-  $("#tutor-question").value = "";
-  $("#tutor-status").textContent = "";
-  $("#tutor-retry-actions").classList.add("hidden");
-  setTutorBusy(false);
-  if (typeof resetStudyConversation === "function") resetStudyConversation();
-}
-
-function setTutorBusy(busy) {
-  tutorPending = busy;
-  $("#tutor-send").disabled = busy;
-  $("#tutor-send").textContent = busy ? "正在回答…" : "发送问题 →";
-  $$("[data-tutor-prompt], #tutor-retry, #tutor-use-cards, #tutor-clear, #tutor-restore, #tutor-hint, #tutor-reference, [data-ask-context], [data-task-hint]").forEach(b => b.disabled = busy);
-  $("#tutor-messages").setAttribute("aria-busy", String(busy));
 }
 
 function renderWorkspace() {
@@ -102,7 +63,7 @@ async function refreshPath() {
     return false;
   }
   try {
-    const result = await api("/api/learning-path");
+    const result = await zhixingApi.getLearningPath();
     if (requestVersion !== pathRequestVersion || userId !== state.user?.id) return false;
     pathData = result;
     renderPath();
@@ -134,7 +95,7 @@ $("#learning-profile-form").onsubmit = async event => {
   $("#learning-profile-save").disabled = true;
   $("#learning-profile-error").textContent = "";
   try {
-    await api("/api/learning-profile", jsonRequest("PATCH", {goal:$("#learning-goal").value, level:$("#learning-level").value, weekly_hours:$("#learning-hours").value === "" ? null : Number($("#learning-hours").value)}));
+    await zhixingApi.updateLearningProfile({goal:$("#learning-goal").value, level:$("#learning-level").value, weekly_hours:$("#learning-hours").value === "" ? null : Number($("#learning-hours").value)});
     if (userId !== state.user?.id) return;
     closeModals();
     await refreshPath();
@@ -166,7 +127,7 @@ $("#path-select-confirm").onclick = async () => {
   const pathId = detailPathId;
   $("#path-select-confirm").disabled = true;
   try {
-    if (pathId !== pathData.active_path_id) await api("/api/learning-path/select", jsonRequest("POST", {path_id:pathId}));
+    if (pathId !== pathData.active_path_id) await zhixingApi.selectLearningPath(pathId);
     if (!await refreshPath()) throw new Error("路径已选择，学习列表加载失败，请刷新重试");
     closeModals();
     if (pathData.resume_course_id) await openLesson(pathData.resume_course_id);
@@ -261,8 +222,8 @@ async function openLesson(courseId) {
   renderLessonNavigation();
   try {
     // Save visit first. Completion is never inferred from opening a page.
-    await api(`/api/courses/${courseId}/learn`, {method:"POST"});
-    const result = await api(`/api/courses/${courseId}/lesson`);
+    await zhixingApi.startLearning(courseId);
+    const result = await zhixingApi.getLesson(courseId);
     if (requestVersion !== lessonRequestVersion || userId !== state.user?.id) return;
     selectedLesson = result.lesson;
     resetTutor();
@@ -332,7 +293,7 @@ async function saveLessonProgress(value) {
   $("#progress-error").textContent = "";
   $("#lesson-progress").textContent = "正在保存，请稍候…";
   try {
-    await api(`/api/courses/${lesson.id}/progress`, jsonRequest("PATCH", {progress:value}));
+    await zhixingApi.updateProgress(lesson.id, value);
     if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return;
     selectedLesson.progress = value;
     selectedLesson.status = value === 100 ? "completed" : "in_progress";
@@ -377,113 +338,3 @@ $("#completion-next").onclick = async () => {
   else if (completionTarget.type === "mission") startMission();
   else { if (await closeModals()) $("#student-workbench").scrollIntoView({behavior:"smooth"}); }
 };
-
-function appendTutorInline(element, text) {
-  String(text).split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/g).forEach(part => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      const strong = document.createElement("strong"); strong.textContent = part.slice(2, -2); element.append(strong);
-    } else if (part.startsWith("`") && part.endsWith("`")) {
-      const code = document.createElement("code"); code.textContent = part.slice(1, -1); element.append(code);
-    } else element.append(document.createTextNode(part));
-  });
-}
-function appendTutorText(element, text) {
-  let list = null;
-  String(text).split("\n").forEach(line => {
-    if (!line.trim()) { list = null; return; }
-    const bullet = line.match(/^\s*([-*]|\d+[.)、])\s+(.+)$/);
-    if (bullet) {
-      const tag = /^\d/.test(bullet[1]) ? "OL" : "UL";
-      if (!list || list.tagName !== tag) { list = document.createElement(tag.toLowerCase()); element.append(list); }
-      const item = document.createElement("li"); appendTutorInline(item, bullet[2]); list.append(item);
-    } else {
-      list = null;
-      const paragraph = document.createElement("p");
-      const heading = line.match(/^#{1,6}\s+(.+)$/);
-      if (heading) {
-        const strong = document.createElement("strong"); appendTutorInline(strong, heading[1]); paragraph.append(strong);
-      } else appendTutorInline(paragraph, line);
-      element.append(paragraph);
-    }
-  });
-}
-function tutorMessage(label, text) {
-  const message = document.createElement("div"); message.className = "tutor-message";
-  const heading = document.createElement("strong"); heading.textContent = label;
-  const body = document.createElement("div"); body.className = "tutor-answer";
-  // Render fenced code as text nodes; never interpret model output as HTML.
-  String(text).split(/(```[\s\S]*?```)/g).forEach(part => {
-    if (part.startsWith("```")) {
-      const pre = document.createElement("pre");
-      const code = document.createElement("code");
-      code.textContent = part.slice(3, -3).replace(/^[a-z0-9_-]*\n/i, "");
-      pre.append(code); body.append(pre);
-    } else {
-      appendTutorText(body, part);
-    }
-  });
-  message.append(heading, body); $("#tutor-messages").append(message);
-  $("#tutor-messages").scrollTop = $("#tutor-messages").scrollHeight;
-}
-async function sendTutor(question, {retry = false, mode = "auto"} = {}) {
-  return sendStudyTutor(question,{retry,mode});
-}
-$("#tutor-form").onsubmit = event => { event.preventDefault(); sendTutor($("#tutor-question").value.trim()); };
-$("#tutor-retry").onclick = () => sendTutor(failedQuestion, {retry:true});
-$("#tutor-use-cards").onclick = () => sendTutor(failedQuestion, {retry:true, mode:"guided-demo"});
-$("#tutor-clear").onclick = () => newStudyConversation();
-$$("[data-tutor-prompt]").forEach(button => button.onclick = () => {
-  if (button.dataset.tutorPrompt === "给我一道练习" && exerciseState?.exercise) {
-    setStudyFocus("exercise");
-    $("#fixed-exercise").scrollIntoView({block:"start",behavior:"smooth"});
-    return;
-  }
-  if (["解释本课知识","总结重点"].includes(button.dataset.tutorPrompt)) setStudyFocus("overview");
-  $("#tutor-question").value = button.dataset.tutorPrompt;
-  sendTutor(button.dataset.tutorPrompt);
-});
-
-function renderMission(attempt) {
-  missionAttempt = attempt;
-  $("#mission-status").textContent = `${attempt.step} / ${attempt.total} 个决策已完成 · ${attempt.score} 分`;
-  $("#mission-progress").value = attempt.step;
-  $("#mission-history").innerHTML = attempt.history.map(h => `<div class="decision-feedback"><strong>${escapeHTML(h.title)} · +${h.points} 分</strong><p>你的选择：${escapeHTML(h.text)}</p><p>${escapeHTML(h.feedback)}</p></div>`).join("");
-  $("#mission-retry").classList.toggle("hidden", !attempt.complete);
-  if (attempt.complete) {
-    $("#mission-scene-title").textContent = attempt.passed ? "任务通过 · 发布守护者" : "任务完成 · 再练习一次";
-    $("#mission-scenario").textContent = `最终成绩 ${attempt.score} / 100。${attempt.passed ? "你已掌握基本发布决策。" : "75 分通过。回看反馈，再次挑战。"} 真实项目仍需结合团队流程与实际风险判断。`;
-    $("#mission-choices").replaceChildren();
-    refreshPath();
-  } else {
-    $("#mission-scene-title").textContent = attempt.current.title;
-    $("#mission-scenario").textContent = attempt.current.scenario;
-    $("#mission-choices").innerHTML = attempt.current.choices.map(c => `<button class="choice-button" data-choice="${c.id}">${escapeHTML(c.text)} <span>→</span></button>`).join("");
-  }
-}
-async function startMission() {
-  if (!requireLogin("挑战任务")) return;
-  if (typeof flushNotebook === "function" && !await flushNotebook()) {
-    showToast("请先保存笔记或处理版本冲突，再进入挑战");
-    return;
-  }
-  try {
-    const result = await api("/api/missions/release-rescue/start", {method:"POST"});
-    renderMission(result.attempt); openModal("#mission-modal");
-  } catch (error) { showToast(error.message); }
-}
-$("#mission-start").onclick = startMission;
-$("#mission-retry").onclick = startMission;
-$("#mission-choices").onclick = async event => {
-  const button = event.target.closest("[data-choice]");
-  if (!button) return;
-  $$("[data-choice]").forEach(b => b.disabled = true);
-  try {
-    const result = await api(`/api/missions/attempts/${missionAttempt.id}/answer`, jsonRequest("POST", {step:missionAttempt.step, choice_id:button.dataset.choice}));
-    renderMission(result.attempt);
-  } catch (error) { showToast(error.message); $$("[data-choice]").forEach(b => b.disabled = false); }
-};
-document.addEventListener("keydown", event => { if (event.key === "Escape") closeModals(); });
-api("/api/prototype/config").then(config => {
-  $("#learning-environment").textContent = "学习画像与进度随账号保存";
-  $("#tutor-mode-label").textContent = config.tutor_mode === "live" ? "AI 答疑 · 基于当前课时，不执行代码" : "课时知识卡 · 规则式助手（非大模型），未读取附件";
-}).catch(() => { $("#learning-environment").textContent = "服务暂不可用"; });
