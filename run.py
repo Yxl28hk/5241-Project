@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import wraps
 from pathlib import Path
+from secrets import token_hex
 from typing import Any, Mapping
 
 from flask import Flask, g, jsonify, request, send_from_directory, session
@@ -23,6 +24,9 @@ from config import (
     MAX_FILE_SIZE,
     SECRET_KEY,
     UPLOAD_FOLDER,
+    TUTOR_API_URL,
+    TUTOR_API_KEY,
+    TUTOR_MODEL,
 )
 
 app = Flask(__name__, static_folder=None)
@@ -31,6 +35,9 @@ app.config.update(
     MAX_CONTENT_LENGTH=MAX_FILE_SIZE,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
+    TUTOR_API_URL=TUTOR_API_URL,
+    TUTOR_API_KEY=TUTOR_API_KEY,
+    TUTOR_MODEL=TUTOR_MODEL,
 )
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 
@@ -191,7 +198,7 @@ def index():
 
 @app.get("/<filename>")
 def static_asset(filename):
-    if filename not in {"app.js", "styles.css", "prototype.js", "prototype.css"}:
+    if filename not in {"app.js", "styles.css", "prototype.js", "prototype.css", "study.js"}:
         return jsonify(error="文件不存在"), 404
     return send_from_directory(BASE_DIR, filename)
 
@@ -493,6 +500,7 @@ def remove_course_learner(course_id: int, user_id: int):
 @app.post("/api/courses/<int:course_id>/learn")
 @login_required
 def start_learning(course_id: int):
+    from app.models.learner import record_visit
     db = get_db()
     if db.execute("SELECT id FROM courses WHERE id = %s", (course_id,)).fetchone() is None:
         return jsonify(error="课程不存在"), 404
@@ -501,6 +509,7 @@ def start_learning(course_id: int):
         ON CONFLICT(user_id, course_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP""",
         (session["user_id"], course_id),
     )
+    record_visit(db, session["user_id"], course_id)
     db.commit()
     return jsonify(message="课程已加入学习记录")
 
@@ -558,6 +567,10 @@ def avatar_file(filename: str):
 
 from app.routes.prototype import register_prototype, initialize_prototype
 register_prototype(app, get_db, login_required)
+from app.routes.learning import register_learning
+register_learning(app, get_db, login_required)
+from app.routes.study import register_study
+register_study(app, get_db, login_required)
 
 
 @app.cli.command("init-db")
@@ -566,6 +579,16 @@ def init_db_command():
     initialize_database()
     initialize_prototype(get_db())
     print("Database initialized.")
+
+
+@app.cli.command("init-learning")
+def init_learning_command():
+    """Add learner tables to an existing database without reseeding accounts or courses."""
+    from app.models.learner import initialize_learning
+    db = get_db()
+    initialize_learning(db)
+    db.commit()
+    print("Learner schema updated; existing accounts and progress preserved.")
 
 
 if __name__ == "__main__":

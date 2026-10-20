@@ -8,9 +8,12 @@ from app.models.content import MODULES, MISSION
 
 import json
 from flask import jsonify, request, session
+from app.models.tutor import tutor_mode, validate_history
 
 
 def initialize_prototype(db):
+    from app.models.learner import initialize_learning
+    initialize_learning(db)
     db.execute("""CREATE TABLE IF NOT EXISTS prototype_courses (
         slug TEXT PRIMARY KEY, course_id BIGINT NOT NULL UNIQUE
         REFERENCES courses(id) ON DELETE CASCADE)""")
@@ -48,28 +51,22 @@ def public_attempt(row):
 def register_prototype(app, get_db, login_required):
     @app.get("/api/prototype/config")
     def config():
-        return jsonify(database="postgresql", tutor_mode="guided-demo")
+        return jsonify(database="postgresql", tutor_mode=tutor_mode(app))
 
     @app.get("/api/learning-path")
     @login_required
     def path():
+        from app.models.learner import learning_snapshot
         db = get_db()
-        rows = db.execute("""SELECT p.slug, c.id, c.title, COALESCE(l.progress, 0) AS progress
-            FROM prototype_courses p JOIN courses c ON c.id = p.course_id
-            LEFT JOIN learning_records l ON l.course_id = c.id AND l.user_id = %s""",
-            (session["user_id"],)).fetchall()
-        by_slug = {r["slug"]: dict(r) for r in rows}
-        modules = [{**m, **by_slug[m["slug"]]} for m in MODULES if m["slug"] in by_slug]
+        result = learning_snapshot(db, session["user_id"])
         attempts = db.execute("""SELECT * FROM mission_attempts WHERE user_id = %s AND mission_id = %s
             ORDER BY id DESC LIMIT 1""", (session["user_id"], MISSION["id"])).fetchone()
         best = db.execute("""SELECT MAX(score) AS score FROM mission_attempts
             WHERE user_id = %s AND mission_id = %s AND step = %s""",
             (session["user_id"], MISSION["id"], len(MISSION["steps"]))).fetchone()["score"]
-        return jsonify(modules=modules, progress=round(sum(m["progress"] for m in modules) / len(modules)) if modules else 0,
-                       completed=sum(m["progress"] == 100 for m in modules),
-                       next_course_id=next((m["id"] for m in modules if m["progress"] < 100), None),
-                       mission={"title": MISSION["title"], "description": MISSION["description"],
-                                "best_score": best, "attempt": public_attempt(attempts) if attempts else None})
+        result["mission"] = {"title": MISSION["title"], "description": MISSION["description"],
+                             "best_score": best, "attempt": public_attempt(attempts) if attempts else None}
+        return jsonify(result)
 
     @app.patch("/api/courses/<int:course_id>/progress")
     @login_required
@@ -96,25 +93,19 @@ def register_prototype(app, get_db, login_required):
         course_id = data.get("course_id")
         if type(course_id) is not int:
             return jsonify(error="请选择课程"), 400
-        row = get_db().execute("""SELECT c.title, c.description, p.slug, COALESCE(l.progress, 0) AS progress
+        history = data.get("history", [])
+        requested_mode = data.get("mode", "auto")
+        if not validate_history(history) or not isinstance(requested_mode, str) or requested_mode not in {"auto", "guided-demo"}:
+            return jsonify(error="会话格式无效，请清空对话后重试"), 400
+        row = get_db().execute("""SELECT c.id, c.title, c.description, p.slug, COALESCE(l.progress, 0) AS progress
             FROM courses c LEFT JOIN prototype_courses p ON p.course_id = c.id
             LEFT JOIN learning_records l ON l.course_id = c.id AND l.user_id = %s WHERE c.id = %s""",
             (session["user_id"], course_id)).fetchone()
         if row is None:
             return jsonify(error="课程不存在"), 404
         module = next((m for m in MODULES if m["slug"] == row["slug"]), None)
-        question = data["message"].strip().lower()
-        if module:
-            if any(k in question for k in ["下一步", "next", "计划"]):
-                answer = "建议下一步：" + ("尝试 Release Rescue，把知识用于实际决策。" if row["progress"] == 100 else "阅读本节内容，再用自己的话回答检查问题；理解后标记完成。")
-            elif any(k in question for k in ["提示", "hint", "不懂"]):
-                answer = module["hint"] + "\n检查问题：" + module["question"]
-            else:
-                answer = "本课知识卡：" + module["lesson"] + "\n试着回答：" + module["question"]
-        else:
-            answer = "这门课程的简介是：" + row["description"] + "\n演示助手尚未读取上传文件。请先浏览资源，列出一个关键概念和一个疑问，再向教师求证。"
-        return jsonify(mode="guided-demo", label="演示模式 · 规则式学习助手（非大模型）", answer=answer,
-                       context={"title": row["title"], "progress": row["progress"]})
+        from app.routes.study import tutor_reply
+        return tutor_reply(app,get_db,data,{**row,"title":module["title"] if module else row["title"]},module,session["user_id"])
 
     @app.post("/api/missions/release-rescue/start")
     @login_required

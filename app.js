@@ -5,7 +5,11 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 async function api(url, options = {}) {
   const response = await fetch(url, { credentials: "same-origin", ...options });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || "请求失败，请确认 Flask 服务已启动");
+  if (!response.ok) {
+    const error = new Error(body.error || "请求失败，请确认 Flask 服务已启动");
+    error.status = response.status;
+    throw error;
+  }
   return body;
 }
 function openModal(id) {
@@ -15,11 +19,30 @@ function openModal(id) {
   $(id).classList.remove("hidden");
   document.body.style.overflow = "hidden";
 }
-function closeModals() { $$(".modal-backdrop").forEach((modal) => modal.classList.add("hidden")); document.body.style.overflow = ""; }
+async function closeModals() {
+  if (!$("#lesson-modal").classList.contains("hidden") && typeof flushNotebook === "function" && !await flushNotebook()) {
+    showToast("笔记尚未同步，请重试保存后再离开，或复制内容后重新载入。");
+    return false;
+  }
+  $$(".modal-backdrop").forEach(modal => modal.classList.add("hidden"));
+  document.body.style.overflow = "";
+  return true;
+}
 function showToast(message) { $("#toast-message").textContent = message; $("#toast").classList.remove("hidden"); setTimeout(() => $("#toast").classList.add("hidden"), 2800); }
 function showError(selector, error) { $(selector).textContent = error instanceof Error ? error.message : error; }
 function updateUserUI() {
   const user = state.user;
+  const studentSession = user?.role === "student";
+  const previousStudent = document.body.dataset.studentId;
+  document.body.classList.toggle("learner-signed-in", studentSession);
+  document.body.dataset.studentId = studentSession ? String(user.id) : "";
+  if (studentSession && previousStudent !== String(user.id)) {
+    $$(".nav-link").forEach(button => button.classList.toggle("active", button.dataset.view === "my-learning"));
+    window.scrollTo({top:0, behavior:"instant"});
+  } else if (!user && previousStudent) {
+    $$(".nav-link").forEach(button => button.classList.toggle("active", button.dataset.view === "explore"));
+    window.scrollTo({top:0, behavior:"instant"});
+  }
   $("#user-name").textContent = user ? user.name : "游客";
   $("#user-role-badge").textContent = user?.is_admin ? "管理员" : user?.is_teacher ? "教师" : user ? "学生" : "";
   $("#user-role-badge").classList.toggle("hidden", !user);
@@ -102,7 +125,8 @@ $$(".nav-link").forEach((button) => button.addEventListener("click", () => {
     if (state.user?.can_upload) openSpace("uploads");
     else showToast("学生账号没有资源管理权限");
   }
-  else if (button.dataset.view === "my-learning") openSpace("learning");
+  else if (button.dataset.view === "my-learning") $("#student-workbench").scrollIntoView({behavior:"smooth"});
+  else if (button.dataset.view === "learning-profile") openLearningProfile();
   else if (button.dataset.view === "admin-users") openAdminUsers();
 }));
 $$(".category-tab").forEach((tab) => tab.addEventListener("click", async () => {
@@ -195,6 +219,7 @@ async function openSpace(type) {
           await api(`/api/profile/learning/${courseId}`, { method: "DELETE" });
           showToast("已停止学习该课程");
           await openSpace("learning");
+          await refreshPath();
         } catch (error) { showToast(error.message); }
         return;
       }
@@ -209,6 +234,7 @@ async function openSpace(type) {
           showToast("课程已删除");
           await openSpace("uploads");
           await loadCourses();
+          await refreshPath();
         } catch (error) { showToast(error.message); }
         return;
       }
@@ -279,6 +305,7 @@ $("#password-form").addEventListener("submit", async (event) => {
   } catch (error) { showError("#password-error", error); }
 });
 $("#profile-logout").addEventListener("click", async () => {
+  if (typeof flushNotebook === "function" && !await flushNotebook()) { showToast("请先保存笔记或处理版本冲突再退出"); return; }
   try { await api("/api/auth/logout", { method: "POST" }); state.user = null; updateUserUI(); closeModals(); showToast("已安全退出"); }
   catch (error) { showToast(error.message); }
 });

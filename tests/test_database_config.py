@@ -27,6 +27,8 @@ def test_postgres_connection_reused_and_closed(monkeypatch):
     connection.close.assert_called_once()
 
 
-def test_public_config_contains_no_demo_switch_or_credentials():
+def test_public_config_contains_no_demo_switch_or_credentials(monkeypatch):
+    for key in ("TUTOR_API_URL", "TUTOR_API_KEY", "TUTOR_MODEL"):
+        monkeypatch.setitem(platform.app.config, key, "")
     result = platform.app.test_client().get("/api/prototype/config")
     assert result.json == {"database": "postgresql", "tutor_mode": "guided-demo"}

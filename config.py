@@ -19,3 +19,6 @@ MAX_FILE_SIZE = 500 * 1024 * 1024
 ADMIN_EMAIL = os.environ.get("ZHIXING_ADMIN_EMAIL", "admin@zhixing.com").strip().lower()
 ADMIN_PASSWORD = os.environ.get("ZHIXING_ADMIN_PASSWORD", "")
 SECRET_KEY = os.environ.get("ZHIXING_SECRET_KEY") or token_hex(32)
+TUTOR_API_URL = os.environ.get("TUTOR_API_URL", "").strip()
+TUTOR_API_KEY = os.environ.get("TUTOR_API_KEY", "").strip()
+TUTOR_MODEL = os.environ.get("TUTOR_MODEL", "").strip()
