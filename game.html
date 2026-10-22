@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="迭代方舟：软件工程风险决策单机教学游戏" />
+  <title>迭代方舟 · 单机版</title>
+  <link rel="stylesheet" href="game.css" />
+</head>
+<body>
+  <div class="game-shell">
+    <header class="game-header">
+      <a class="game-brand" href="/" aria-label="返回知行学习平台">
+        <span class="brand-mark">迭</span>
+        <span><strong>迭代方舟</strong><small>ITERATION ARK · SOLO LAB</small></span>
+      </a>
+      <div class="header-actions">
+        <label class="mode-toggle"><input id="classroom-mode" type="checkbox" checked /><span class="toggle-track"></span><span>课堂提示</span></label>
+        <span class="save-state" id="save-state">本地存档已开启</span>
+        <button class="button button-light" id="reset-game" type="button">重新开始</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="intro-row">
+        <div>
+          <p class="eyebrow">SOFTWARE ENGINEERING DECISION SIMULATOR</p>
+          <h1>把六次发布，做成一年的工程选择。</h1>
+          <p class="intro-copy">你是业务开发工程师。每个版本都要在交付、质量和协作之间做取舍，技术债会随着时间累积，最终决定系统能否安全抵达 V6。</p>
+        </div>
+        <div class="year-card">
+          <span>当前年度</span><strong id="year-label">V1 / 6</strong><small id="year-caption">第 1–2 个月 · 建立基础</small>
+        </div>
+      </section>
+
+      <section class="dashboard" aria-label="年度指标">
+        <article class="metric metric-debt"><div class="metric-heading"><span>技术债</span><strong id="debt-value">0</strong></div><div class="metric-track"><i id="debt-bar"></i></div><small id="debt-note">健康区间 · 后续风险较低</small></article>
+        <article class="metric metric-satisfaction"><div class="metric-heading"><span>产品满意度</span><strong id="satisfaction-value">80</strong></div><div class="metric-track"><i id="satisfaction-bar"></i></div><small id="satisfaction-note">业务沟通顺畅</small></article>
+        <article class="metric metric-progress"><div class="metric-heading"><span>本版交付余量</span><strong id="delivery-value">100</strong></div><div class="metric-track"><i id="delivery-bar"></i></div><small id="delivery-note">可以按计划推进</small></article>
+        <article class="metric metric-accidents"><div class="metric-heading"><span>事故台账</span><strong id="accident-value">0 B / 0 S</strong></div><div class="accident-pills"><span id="b-pill">B 级 0</span><span id="s-pill">S 级 0</span></div><small id="accident-note">当前没有线上事故</small></article>
+      </section>
+
+      <section class="version-progress" aria-label="版本流程">
+        <div class="progress-heading"><span class="eyebrow">VERSION PIPELINE</span><span id="stage-counter">阶段 1 / 7</span></div>
+        <div class="stage-line" id="stage-line"></div>
+      </section>
+
+      <div class="play-layout">
+        <section class="decision-panel" aria-live="polite">
+          <div class="panel-topline"><span class="stage-badge" id="stage-badge">阶段 1 · 需求评审</span><span class="risk-label" id="risk-label">风险评估中</span></div>
+          <h2 id="stage-title">需求评审</h2>
+          <p class="stage-context" id="stage-context"></p>
+          <div id="decision-area"></div>
+        </section>
+
+        <aside class="side-panel">
+          <section class="signal-card">
+            <div class="side-heading"><div><span class="eyebrow">RISK SIGNALS</span><h3>风险信号</h3></div><span class="signal-count" id="signal-count">0</span></div>
+            <div id="signals-list" class="signals-list"></div>
+          </section>
+          <section class="log-card">
+            <div class="side-heading"><div><span class="eyebrow">YEAR LOG</span><h3>年度复盘</h3></div><span id="report-count">0 / 6</span></div>
+            <div id="reports-list" class="reports-list"></div>
+          </section>
+        </aside>
+      </div>
+
+      <section class="teaching-note" id="teaching-note">
+        <span class="note-icon">✦</span><div><strong>工程提示</strong><p id="teaching-copy">每次“先上线再说”的选择都可能把今天的进度，变成下个版本的风险。</p></div>
+      </section>
+    </main>
+    <footer class="game-footer"><span>迭代方舟 · 单机课堂版</span><span>进度保存在当前浏览器的 localStorage 中</span><a href="/">返回学习平台</a></footer>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>

@@ -22,6 +22,7 @@ SCRIPTS = (
     "features/bootstrap.js",
 )
 PUBLIC_ASSETS = {*SCRIPTS, "styles/main.css", "styles/learning.css"}
+GAME_ASSETS = {"game.html", "game.css", "game.js"}
 LEGACY_BUNDLES = {
     # Original HTML loads only app.js / prototype.js / study.js, without api.js.
     "app.js": SCRIPTS[:6] + ("features/bootstrap.js",),
@@ -40,6 +41,11 @@ def index():
     return send_from_directory(FRONTEND_DIR, "index.html")
 
 
+@bp.get("/game")
+def game():
+    return send_from_directory(BASE_DIR, "game.html")
+
+
 @bp.get("/frontend/<path:filename>")
 def frontend_asset(filename):
     if filename not in PUBLIC_ASSETS:
@@ -49,6 +55,8 @@ def frontend_asset(filename):
 
 @bp.get("/<filename>")
 def static_asset(filename):
+    if filename in GAME_ASSETS:
+        return send_from_directory(BASE_DIR, filename)
     if filename in LEGACY_FILES:
         return send_from_directory(FRONTEND_DIR, LEGACY_FILES[filename])
     if filename in LEGACY_BUNDLES:
