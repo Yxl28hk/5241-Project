@@ -107,10 +107,13 @@ def course_lesson(course_id, *, user_id, get_db):
     if row is None:
         return ({"error": "课程不存在或已下架"}, 404)
     module = next((m for m in MODULES if m["slug"] == row["slug"]), {})
+    from app.studio.authoring import read_studio
+    studio = read_studio(get_db(), course_id)
     return {
         "lesson": {
             **module,
             **dict(row),
+            "studio": studio,
             "title": module.get("title", row["title"]),
             "status": learning_status(row["progress"], row["enrolled"]),
             "file_url": f"/uploads/{row['filename']}" if row["filename"] else None,

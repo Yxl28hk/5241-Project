@@ -146,5 +146,41 @@
   [
     "POST",
     "/api/tutor"
+  ],
+  [
+    "GET",
+    "/api/courses/<int:course_id>/learners/<int:user_id>"
+  ],
+  [
+    "GET",
+    "/api/studio/courses/<int:course_id>"
+  ],
+  [
+    "POST",
+    "/api/studio/courses"
+  ],
+  [
+    "PATCH",
+    "/api/studio/courses/<int:course_id>"
+  ],
+  [
+    "GET",
+    "/api/studio/ai/config"
+  ],
+  [
+    "POST",
+    "/api/studio/ai/jobs"
+  ],
+  [
+    "GET",
+    "/api/studio/ai/jobs/<jid>"
+  ],
+  [
+    "DELETE",
+    "/api/studio/ai/jobs/<jid>"
+  ],
+  [
+    "GET",
+    "/game"
   ]
 ]

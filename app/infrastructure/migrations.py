@@ -6,6 +6,7 @@ MIGRATION_DIR = BASE_DIR / "migrations"
 CORE = ("001_core.sql",)
 LEARNING = ("002_learning.sql", "003_study.sql")
 PROTOTYPE = (*LEARNING, "004_prototype.sql")
+PROTOTYPE = (*PROTOTYPE, "005_course_studio.sql")
 ALL = (*CORE, *PROTOTYPE)
 
 
