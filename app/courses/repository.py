@@ -2,7 +2,8 @@
 
 
 def search_courses(db, query, category):
-    conditions, params = [], []
+    # The quiz anchor course lives in this table but is never a browsable course.
+    conditions, params = ["resource_type <> 'quiz'"], []
     if query:
         conditions.append("(title LIKE %s OR description LIKE %s OR author LIKE %s)")
         params.extend([f"%{query}%"] * 3)
@@ -39,7 +40,7 @@ def find_manager_role(db, params):
 
 def list_all_courses(db):
     return db.execute(
-        "SELECT * FROM courses ORDER BY created_at DESC, id DESC"
+        "SELECT * FROM courses WHERE resource_type <> 'quiz' ORDER BY created_at DESC, id DESC"
     ).fetchall()
 
 

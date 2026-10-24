@@ -93,7 +93,7 @@ def test_course_search_keeps_query_and_category_independent(monkeypatch):
 
 
 def test_business_routes_and_services_do_not_execute_sql():
-    for domain in ("auth", "courses", "learning", "tutor", "missions"):
+    for domain in ("auth", "courses", "learning", "tutor", "missions", "quiz"):
         for filename in ("routes.py", "service.py"):
             path = ROOT / "app" / domain / filename
             tree = ast.parse(path.read_text(encoding="utf-8"))

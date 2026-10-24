@@ -49,6 +49,14 @@ test("all JSON business functions use the expected route, method and payload", a
     ["askTutor", [data], "POST", "/api/tutor", data],
     ["startMission", [], "POST", "/api/missions/release-rescue/start"],
     ["answerMission", [9, data], "POST", "/api/missions/attempts/9/answer", data],
+    ["getQuizOverview", [], "GET", "/api/quiz/overview"],
+    ["startQuizRun", [data], "POST", "/api/quiz/runs", data],
+    ["getQuizRun", [3], "GET", "/api/quiz/runs/3"],
+    ["answerQuiz", [3, data], "POST", "/api/quiz/runs/3/answer", data],
+    ["abandonQuizRun", [3], "POST", "/api/quiz/runs/3/abandon"],
+    ["getQuizResult", ["quest"], "GET", "/api/quiz/result?mode=quest"],
+    ["adoptQuizLevel", [], "POST", "/api/quiz/profile/adopt"],
+    ["clearQuizReference", [], "DELETE", "/api/quiz/profile/reference"],
   ];
   for (const [name, args, method, path, body] of cases) {
     const { client, calls } = fixture();

@@ -5,7 +5,7 @@ from config import BASE_DIR
 MIGRATION_DIR = BASE_DIR / "migrations"
 CORE = ("001_core.sql",)
 LEARNING = ("002_learning.sql", "003_study.sql")
-PROTOTYPE = (*LEARNING, "004_prototype.sql")
+PROTOTYPE = (*LEARNING, "004_prototype.sql", "005_quiz.sql", "006_quiz_play.sql")
 ALL = (*CORE, *PROTOTYPE)
 
 
@@ -46,10 +46,11 @@ def initialize_core(db, settings):
 
 
 def initialize_prototype(db):
-    from app.infrastructure.seeds import seed_lessons
+    from app.infrastructure.seeds import seed_lessons, seed_quiz
 
     apply_migrations(db, PROTOTYPE)
     seed_lessons(db)
+    seed_quiz(db)
 
 
 def initialize_learning(db):

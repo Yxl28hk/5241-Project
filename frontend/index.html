@@ -24,6 +24,7 @@
         <button class="nav-link" id="path-nav" data-view="path">学习路径</button>
         <button class="nav-link" data-view="learning-profile">学习画像</button>
         <button class="nav-link" data-view="uploads" data-upload-only>资源管理</button>
+        <button class="nav-link hidden" data-view="admin-quiz" data-admin-only>题库管理</button>
         <button class="nav-link hidden" data-view="admin-users" data-admin-only>账户数据</button>
       </nav>
       <div class="topbar-actions">
@@ -84,7 +85,7 @@
         <div class="path-catalog" id="path-catalog"></div>
         <div class="active-path-heading"><h3 id="active-path-title">路径课程</h3><span id="path-save-note" class="supporting-copy">完成状态由你确认</span></div>
         <div class="path-total"><p id="path-summary" aria-live="polite">正在加载学习路径…</p><progress id="path-progress" max="100" value="0" aria-label="学习路径总进度"></progress></div>
-        <div class="journey-layout"><div class="path-list" id="path-list"></div><aside class="mission-card"><span class="section-kicker">PUT IT INTO PRACTICE</span><div class="mission-icon" aria-hidden="true">⌘</div><h3>Release Rescue</h3><strong>拯救周五发布</strong><p>登录异常、红色 CI、上线事故。你将如何带领团队完成一次安全发布？</p><p>4 个决策 · 约 3 分钟 · 75 分通过<br>可随时挑战，建议先完成左侧课程。</p><small id="mission-best">尚未开始</small><button class="button" id="mission-start">开始 / 继续挑战 ↗</button></aside></div>
+        <div class="journey-layout"><div class="path-list" id="path-list"></div><aside class="quest-card"><span class="section-kicker">LEVEL QUEST / SELF-CHECK</span><div class="quest-icon" aria-hidden="true">🎯</div><h3>水平闯关</h3><strong>18 题 · 3 关摸底</strong><p>一局 18 题，从开发常识到发布权衡，逐关推进：每关答对 4 题才能继续。结果只作为起点参考，不是能力评分。</p><p class="quest-levels-note">下列标记是历史成绩；每局都从第 1 关开始做完整 18 题。</p><ol class="quest-levels" id="quest-levels"></ol><progress id="quest-progress" max="18" value="0" aria-label="闯关进度"></progress><small id="quest-best">尚未开始</small><div class="quest-actions"><button class="button" id="quest-start">开始闯关 →</button><button class="button button-ghost hidden" id="quest-quick">8 题速测 ⚡</button><button class="button button-ghost hidden" id="quest-revenge">错题复仇 ⚔️</button></div></aside></div>
       </section>
 
       <section class="content-section course-section" id="courses">
@@ -200,6 +201,43 @@
     </div>
   </div>
 
+  <div class="modal-backdrop hidden" id="admin-quiz-modal">
+    <div class="modal admin-quiz-modal" role="dialog" aria-modal="true" aria-labelledby="admin-quiz-title">
+      <button class="close-button" data-close-modal>×</button>
+      <div class="modal-heading"><span class="section-kicker">QUESTION BANK</span><h2 id="admin-quiz-title">题库管理</h2><p>维护闯关题库：新增、编辑、停用与删除。停用的题目不再参与抽题；已有作答记录的题目只能停用，不能删除。</p></div>
+      <div class="admin-quiz-toolbar">
+        <span id="admin-quiz-stats" class="supporting-copy"></span>
+        <div class="admin-quiz-filters">
+          <select id="quiz-filter-level" aria-label="按关卡筛选"><option value="all">全部关卡</option></select>
+          <select id="quiz-filter-topic" aria-label="按维度筛选"><option value="all">全部维度</option></select>
+          <select id="quiz-filter-active" aria-label="按状态筛选"><option value="all">全部状态</option><option value="active">启用中</option><option value="inactive">已停用</option></select>
+        </div>
+        <button class="button" id="quiz-bank-create" type="button">新增题目 ＋</button>
+      </div>
+      <div id="admin-quiz-form" class="admin-quiz-form hidden">
+        <h3 id="quiz-form-title">新增题目</h3>
+        <div class="admin-quiz-grid">
+          <label>题目编号<input id="quiz-form-code" type="text" placeholder="concepts-l1-01" /></label>
+          <label>关卡<select id="quiz-form-level"></select></label>
+          <label>维度<select id="quiz-form-topic"></select></label>
+          <label>难度<select id="quiz-form-difficulty"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
+          <label>题型<select id="quiz-form-kind"><option value="single">单选</option><option value="multi">多选</option><option value="order">排序</option></select></label>
+          <label class="admin-quiz-check"><input id="quiz-form-boss" type="checkbox" /> Boss 题（第 3 关压轴）</label>
+        </div>
+        <label>题干<textarea id="quiz-form-stem" rows="2"></textarea></label>
+        <label>代码片段（可选）<textarea id="quiz-form-snippet" rows="3"></textarea></label>
+        <label>选项（每行一个，格式：<code>a. 选项内容</code>）<textarea id="quiz-form-choices" rows="4"></textarea></label>
+        <label>正确选项编号（多选时用逗号分隔，如 <code>a,c</code>）<input id="quiz-form-correct" type="text" /></label>
+        <label>解析<textarea id="quiz-form-explanation" rows="3"></textarea></label>
+        <div class="admin-quiz-actions">
+          <button class="button" id="quiz-form-submit" type="button">保存</button>
+          <button class="button button-ghost" id="quiz-form-cancel" type="button">取消</button>
+        </div>
+      </div>
+      <div id="admin-quiz-list" class="admin-quiz-list"></div>
+    </div>
+  </div>
+
   <div class="modal-backdrop hidden" id="learning-profile-modal"><div class="modal learning-profile-modal" role="dialog" aria-modal="true" aria-labelledby="learning-profile-title">
     <button class="close-button" data-close-modal aria-label="关闭学习画像">×</button><span class="section-kicker">PERSONALIZE YOUR JOURNEY</span><h2 id="learning-profile-title">从你的起点出发。</h2><p class="supporting-copy">填写目标与基础，获得可解释的路径建议。所有信息均可修改，也可以暂时跳过。</p>
     <form id="learning-profile-form">
@@ -218,7 +256,7 @@
       <aside class="tutor-panel" id="tutor-panel"><div class="tutor-heading"><h3>学习助手</h3><button type="button" id="tutor-clear" class="text-action">新对话</button></div><small id="tutor-mode-label">课时知识卡 · 规则式助手（非大模型）</small><p id="tutor-context"></p><div class="focus-context"><span id="tutor-focus-label">提问范围：整节课</span><button class="text-action" id="clear-tutor-focus" type="button">回到整节课</button></div><div class="tutor-messages" id="tutor-messages" aria-live="polite"><p class="supporting-copy">围绕当前课时提问，或试试下面的快捷操作。</p></div><div class="prompt-chips"><button data-tutor-prompt="解释本课知识">解释本节</button><button data-tutor-prompt="举个例子">举个例子</button><button data-tutor-prompt="总结重点">总结重点</button><button data-tutor-prompt="给我一道练习">自测练习</button></div><div class="prompt-chips"><button id="tutor-hint" type="button">任务提示 1</button><button id="tutor-reference" type="button">查看任务参考思路</button><button id="tutor-restore" type="button">恢复账号会话</button></div><form id="tutor-form"><label class="field">你的问题<textarea id="tutor-question" required maxlength="1000" rows="3" placeholder="例如：为什么 CI 失败后不能直接合并？"></textarea></label><button class="button button-primary full-width" id="tutor-send">发送问题 →</button></form><p id="tutor-status" class="supporting-copy" role="status"></p><div id="tutor-retry-actions" class="lesson-actions hidden"><button class="button button-ghost" id="tutor-retry">重试</button><button class="button button-ghost" id="tutor-use-cards">查看课时知识卡</button></div><p class="supporting-copy">按账号和课时保存最近 20 轮；新对话会替换本课当前会话。不执行代码，不读取附件。</p></aside>
     </div>
   </div></div>
-  <div class="modal-backdrop hidden" id="mission-modal"><div class="modal mission-modal" role="dialog" aria-modal="true" aria-labelledby="mission-scene-title"><button class="close-button" data-close-modal aria-label="关闭任务">×</button><span class="section-kicker">RELEASE RESCUE / INTERACTIVE MISSION</span><p id="mission-status" aria-live="polite"></p><progress id="mission-progress" max="4" value="0" aria-label="任务进度"></progress><h2 id="mission-scene-title"></h2><p id="mission-scenario"></p><div class="mission-choices" id="mission-choices"></div><button class="button button-primary hidden" id="mission-retry">再挑战一次 ↻</button><div class="mission-history" id="mission-history" aria-live="polite"></div></div></div>
+  <div class="modal-backdrop hidden" id="quest-modal"><div class="modal quest-modal" role="dialog" aria-modal="true" aria-labelledby="quest-title"><button class="close-button" data-close-modal aria-label="关闭闯关">×</button><span class="section-kicker">LEVEL QUEST / SELF-CHECK</span><p id="quest-status" aria-live="polite"></p><div class="quest-hearts hidden" id="quest-hearts" aria-label="剩余机会"></div><progress id="quest-run-progress" max="18" value="0" aria-label="本局进度"></progress><div class="quest-boss hidden" id="quest-boss">⚔️ BOSS · 综合大题</div><h2 id="quest-title"></h2><p id="quest-topic" class="supporting-copy"></p><pre class="quest-snippet hidden" id="quest-snippet"></pre><p id="quest-stem"></p><div class="quest-choices" id="quest-choices"></div><button class="button button-primary hidden" id="quest-confirm">确认提交 ✓</button><div class="quest-feedback hidden" id="quest-feedback" aria-live="polite"></div><button class="button button-primary hidden" id="quest-next">下一题 →</button><div class="quest-summary hidden" id="quest-summary"></div><button class="button button-primary hidden" id="quest-retry">再挑战一次 ↻</button><button class="button button-ghost hidden" id="quest-to-path">查看推荐路径 →</button></div></div>
   <div class="toast hidden" id="toast" role="status"><span>✓</span><span id="toast-message">操作成功</span></div>
   <script src="/frontend/api/client.js"></script>
   <script src="/frontend/features/state.js"></script>
@@ -228,9 +266,10 @@
   <script src="/frontend/features/navigation.js"></script>
   <script src="/frontend/features/learning/workspace.js"></script>
   <script src="/frontend/features/tutor/panel.js"></script>
-  <script src="/frontend/features/missions/release-rescue.js"></script>
+  <script src="/frontend/features/quiz/level-quest.js"></script>
   <script src="/frontend/features/learning/study.js"></script>
   <script src="/frontend/features/tutor/study.js"></script>
   <script src="/frontend/features/bootstrap.js"></script>
+  <script src="/frontend/features/quiz/bank-admin.js"></script>
 </body>
 </html>

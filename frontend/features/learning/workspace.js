@@ -10,7 +10,15 @@ function lessonStatus(lesson) {
 function renderWorkspace() {
   const profile = pathData?.profile || {};
   $("#workbench-greeting").textContent = state.user ? `${state.user.name}，按自己的节奏，把下一步学扎实。` : "选择一个目标，让每一次学习都有方向。";
-  $("#profile-overview").innerHTML = `<div><dt>学习目标</dt><dd>${escapeHTML(goalLabels[profile.goal] || "尚未填写")}</dd></div><div><dt>基础水平</dt><dd>${escapeHTML(levelLabels[profile.level] || "待了解")}</dd></div><div><dt>每周投入</dt><dd>${profile.weekly_hours ? `${profile.weekly_hours} 小时` : "按自己的节奏"}</dd></div>`;
+  const quizReference = pathData?.quest?.reference;
+  // The reference can be null while runs and answers still exist (after a reset,
+  // or when only quick/revenge was played), so the reset button follows the
+  // real progress instead of the reference.
+  const hasQuestData = Boolean(quizReference || pathData?.quest?.has_progress);
+  $("#profile-overview").innerHTML = `<div><dt>学习目标</dt><dd>${escapeHTML(goalLabels[profile.goal] || "尚未填写")}</dd></div><div><dt>基础水平</dt><dd>${escapeHTML(levelLabels[profile.level] || "待了解")}</dd></div><div><dt>每周投入</dt><dd>${profile.weekly_hours ? `${profile.weekly_hours} 小时` : "按自己的节奏"}</dd></div><div><dt>闯关参考</dt><dd>${quizReference ? `${escapeHTML(levelLabels[quizReference.level] || quizReference.level)}<button class="text-action" id="quiz-adopt">采用</button>` : "尚未闯关"}${hasQuestData ? `<button class="text-action" id="quiz-clear">清空记录</button>` : ""}</dd></div>`;
+  if (quizReference && typeof adoptQuizLevel === "function") $("#quiz-adopt").onclick = adoptQuizLevel;
+  const questClearButton = hasQuestData ? $("#quiz-clear") : null;
+  if (questClearButton && typeof clearQuizReference === "function") questClearButton.onclick = clearQuizReference;
   $("#edit-learning-profile").textContent = profile.goal || profile.level ? "修改学习画像 ↗" : "完善学习画像 ↗";
   const active = pathData?.active_path;
   const resume = pathData?.modules.find(m => m.id === pathData.resume_course_id);
@@ -40,7 +48,7 @@ function renderPath() {
   $("#path-summary").textContent = pathData.active_path ? `${pathData.completed} / ${pathData.modules.length} 节已完成 · 完成率 ${pathData.completion_percent}%（由你确认）` : "可以先查看目录再选择；填写画像后会更新推荐，不会自动替你选课。";
   $("#path-progress").value = pathData.active_path ? pathData.completion_percent : 0;
   $("#path-list").innerHTML = pathData.active_path ? pathData.modules.map((m, i) => `<button class="path-card ${m.progress === 100 ? "finished" : ""}" data-lesson="${m.id}"><span class="path-number">${m.progress === 100 ? "✓" : String(i + 1).padStart(2, "0")}</span><span><small>${escapeHTML(m.stage)} · ${escapeHTML(m.duration)}${m.id === pathData.next_course_id ? " · 下一节未完成" : ""}</small><strong>${escapeHTML(m.title)}</strong><span>${escapeHTML(m.description)}</span><small class="lesson-state state-${lessonStatus(m)}">${statusLabels[lessonStatus(m)]}</small></span><span>↗</span></button>`).join("") : '<div class="path-empty">先从上方选择一条路径。你也可以在下方发现课程中自由学习。</div>';
-  $("#mission-best").textContent = pathData.mission.best_score === null ? "尚无完成成绩" : `历史最高 ${pathData.mission.best_score} / 100`;
+  renderQuestCard();
 }
 
 async function refreshPath() {
@@ -59,7 +67,7 @@ async function refreshPath() {
     $("#path-catalog").replaceChildren();
     $("#active-path-title").textContent = "开启你的学习路径";
     $("#path-progress").value = 0;
-    $("#mission-best").textContent = "尚未开始";
+    renderQuestCard();
     return false;
   }
   try {
@@ -186,9 +194,9 @@ function renderLessonState() {
     $("#completion-next-label").textContent = `${isFollowing ? "下一节" : "还有未完成课时"}：${next.title} · ${next.duration}`;
     $("#completion-next").textContent = isFollowing ? "继续下一节 →" : "继续未完成课时 →";
   } else if (pathComplete) {
-    completionTarget = {type:"mission"};
-    $("#completion-next-label").textContent = "把课程内容用于四个发布决策。Release Rescue · 约 3 分钟。";
-    $("#completion-next").textContent = "开始实践挑战 →";
+    completionTarget = {type:"quest"};
+    $("#completion-next-label").textContent = "用 18 道闯关题检验一下自己的起点。Level Quest · 约 5 分钟。";
+    $("#completion-next").textContent = "开始水平闯关 →";
   } else {
     completionTarget = {type:"workspace"};
     $("#completion-next-label").textContent = "本课已完成，可以回到工作台选择下一项学习内容。";
@@ -257,7 +265,7 @@ async function openLesson(courseId) {
 }
 $("#resume-learning").onclick = () => {
   if (!requireLogin("开始学习")) return;
-  if (pathData?.active_path && pathData.modules.length && pathData.next_course_id === null) startMission();
+  if (pathData?.active_path && pathData.modules.length && pathData.next_course_id === null) startQuest();
   else if (pathData?.active_path && pathData.resume_course_id) openLesson(pathData.resume_course_id);
   else $("#learning-path").scrollIntoView({behavior:"smooth"});
 };
@@ -335,6 +343,6 @@ $("#postpone-lesson").onclick = async () => {
 $("#completion-next").onclick = async () => {
   if (progressSaving || lessonOpening || !completionTarget) return;
   if (completionTarget.type === "lesson") openLesson(completionTarget.id);
-  else if (completionTarget.type === "mission") startMission();
+  else if (completionTarget.type === "quest") startQuest();
   else { if (await closeModals()) $("#student-workbench").scrollIntoView({behavior:"smooth"}); }
 };
