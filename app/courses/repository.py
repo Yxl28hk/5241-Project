@@ -52,7 +52,7 @@ def list_owned_courses(db, params):
 
 def list_learners(db, params):
     return db.execute(
-        """SELECT u.id, u.name, l.progress, l.updated_at
+        """SELECT u.id, u.name, l.progress, l.started_at AS enrolled_at, l.last_opened_at, l.updated_at
         FROM learning_records l JOIN users u ON u.id = l.user_id
         WHERE l.course_id = %s ORDER BY l.updated_at DESC""",
         params,
@@ -109,3 +109,14 @@ def find_owned_course(db, params):
     return db.execute(
         "SELECT * FROM courses WHERE id = %s AND owner_id = %s", params
     ).fetchone()
+
+
+def learner_detail(db, course_id, user_id):
+    return db.execute("""SELECT u.id,u.name,l.progress,l.started_at AS enrolled_at,l.last_opened_at,l.updated_at
+        FROM learning_records l JOIN users u ON u.id=l.user_id
+        WHERE l.course_id=%s AND l.user_id=%s""",(course_id,user_id)).fetchone()
+
+
+def learner_exercises(db, course_id, user_id):
+    return db.execute("""SELECT question_version,choice_id,correct,attempts,updated_at
+        FROM lesson_exercise_results WHERE course_id=%s AND user_id=%s ORDER BY updated_at DESC""",(course_id,user_id)).fetchall()

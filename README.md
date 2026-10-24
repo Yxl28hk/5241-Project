@@ -4,6 +4,8 @@
 
 ## 合作者 API 函数入口
 
+教师端新增资料上传后 AI 整理、课程编辑与学生视角预览，以及课程学习进度统计和个人学习详情。配置、权限、运行限制与验证方法见 [教师端功能说明](docs/TEACHER_STUDIO.md)。AI 初稿需教师核对并主动发布；配置与学生端 Tutor 相互独立。
+
 现有 API 已统一封装到独立的 [`frontend/api/client.js`](frontend/api/client.js)，页面加载后可直接通过 `zhixingApi` 调用账号、课程、学习路径、笔记、练习、Tutor 和任务函数，无需自己拼接 URL 或处理 JSON / FormData。该模块不依赖页面 DOM，无需 npm 安装；`frontend/features/` 下的业务脚本使用同一套函数。
 
 完整的函数与 HTTP 接口对照、参数、权限、返回值、登录会话、文件上传及版本冲突示例见 **[合作者 API 使用 README](docs/API_README.md)**。

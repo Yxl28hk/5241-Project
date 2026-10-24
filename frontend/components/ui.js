@@ -9,6 +9,8 @@ function openModal(id) {
   document.body.style.overflow = "hidden";
 }
 async function closeModals() {
+  if(typeof studioBusy!=="undefined"&&studioBusy){showToast("课程正在保存，请稍候");return false;}
+  if(typeof studioAIBusy!=="undefined"&&studioAIBusy&&!$("#upload-modal").classList.contains("hidden")){showToast("请先停止等待，再关闭编辑器");return false;}
   if (!$("#lesson-modal").classList.contains("hidden") && typeof flushNotebook === "function" && !await flushNotebook()) {
     showToast("笔记尚未同步，请重试保存后再离开，或复制内容后重新载入。");
     return false;

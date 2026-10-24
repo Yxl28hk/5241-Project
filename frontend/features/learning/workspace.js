@@ -141,6 +141,13 @@ function lessonSiblings() {
 }
 
 function renderLessonContent(lesson) {
+  if(lesson.studio){
+    $("#lesson-content").classList.remove("hidden");$("#lesson-copy").classList.add("hidden");$("#lesson-reflection").classList.add("hidden");
+    const fileType=lesson.file_url && /\.(mp4|mov)$/i.test(lesson.file_url) ? "video" : "file";
+    $("#lesson-content").innerHTML=studioLessonHTML(lesson.studio,lesson.file_url,fileType,false);
+    return;
+  }
+
   const guide = lesson.guide;
   $("#lesson-content").classList.toggle("hidden", !guide);
   $("#lesson-copy").classList.toggle("hidden", Boolean(guide));

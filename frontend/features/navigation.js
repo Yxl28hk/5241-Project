@@ -11,4 +11,4 @@ $$(".nav-link").forEach((button) => button.addEventListener("click", () => {
   else if (button.dataset.view === "admin-users") openAdminUsers();
 }));
 $("[data-scroll-courses]").addEventListener("click", () => $("#courses").scrollIntoView({ behavior: "smooth" }));
-$$("[data-open-upload]").forEach((button) => button.addEventListener("click", () => { if (requireUploadPermission()) openModal("#upload-modal"); }));
+$$("[data-open-upload]").forEach((button) => button.addEventListener("click", () => { openStudio(); }));

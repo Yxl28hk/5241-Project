@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;800;900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/frontend/styles/main.css" />
   <link rel="stylesheet" href="/frontend/styles/learning.css" />
+  <link rel="stylesheet" href="/frontend/styles/teacher.css">
 </head>
 <body>
   <div class="app-shell">
@@ -135,18 +136,48 @@
   </div>
 
   <div class="modal-backdrop hidden" id="upload-modal">
-    <div class="modal upload-modal" role="dialog" aria-modal="true" aria-labelledby="upload-title">
-      <button class="close-button" data-close-modal>×</button>
-      <div class="modal-heading"><span class="section-kicker">SHARE KNOWLEDGE</span><h2 id="upload-title">上传学习资源</h2><p>把你的知识整理成课程，分享给更多学习伙伴。</p></div>
-      <form id="upload-form">
-        <label class="field">课程名称<input id="course-title" required type="text" placeholder="例如：从零开始学品牌设计" /></label>
-        <div class="two-fields"><label class="field">课程分类<select id="course-category"><option>设计</option><option>技术</option><option>商业</option><option>人文</option></select></label><label class="field">资源类型<select id="course-type"><option value="pdf">PDF 文档</option><option value="video">视频课程</option><option value="ppt">PPT 演示</option><option value="word">Word 文档</option></select></label></div>
-        <label class="field">课程简介<textarea id="course-description" rows="3" placeholder="简单介绍这门课程的内容..."></textarea></label>
-        <label class="file-drop" for="course-file"><span class="upload-icon">↑</span><strong>点击选择文件或拖拽到这里</strong><small>支持 Word、PDF、PPT、MP4，单个文件不超过 500MB</small><input id="course-file" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.mp4,.mov" /></label>
-        <div class="selected-file hidden" id="selected-file"><span>▧</span><span id="file-name"></span><button type="button" id="remove-file">×</button></div>
-        <div class="form-error" id="upload-error"></div>
-        <button class="button button-primary full-width" type="submit">发布课程 <span>↗</span></button>
-      </form>
+    <div class="modal studio-modal" role="dialog" aria-modal="true" aria-labelledby="studio-heading">
+      <button class="close-button" data-close-modal aria-label="关闭课程编辑器">×</button>
+      <div class="modal-heading"><span class="section-kicker">INSTRUCTOR STUDIO</span><h2 id="studio-heading">创建课程</h2><p>上传已有讲义，让 AI 先整理课程。你只需检查、调整并确认发布。</p></div>
+      <div id="studio-preview-banner" class="analytics-notice hidden">本地编辑器预览 · 可填写、预览和保存本机草稿，不会发布课程或修改团队数据。</div>
+      <form id="studio-form" novalidate><fieldset id="studio-fieldset">
+      <nav class="studio-steps" aria-label="课程创建步骤"><button type="button" class="studio-step" data-tab="ai">上传资料 · AI 整理</button><button type="button" class="studio-step active" data-tab="basics">高级编辑 · 基础</button><button type="button" class="studio-step" data-tab="content">高级编辑 · 内容</button><button type="button" class="studio-step" data-tab="preview">学生视角预览</button></nav>
+      <div class="studio-layout"><div class="studio-main">
+      <section class="studio-pane" data-pane="ai">
+        <div class="ai-intro"><span class="ai-pill" id="studio-ai-model">Claude 课程助手</span><h3>有一份讲义，就可以开始。</h3><p>上传 PDF 或 PPTX，自动整理标题、学习目标、重点章节与练习建议，再给出待确认事项。</p></div>
+        <label class="ai-dropzone" for="studio-ai-file"><span class="ai-upload-symbol">↑</span><strong>选择你的课程资料</strong><span id="studio-ai-filename">支持文字型 PDF / PPTX · 最多 20MB、60 页</span><input id="studio-ai-file" type="file" accept=".pdf,.pptx"></label>
+        <label class="field ai-audience">主要面向谁？（可选）<select id="studio-ai-audience"><option value="auto">让 AI 根据资料建议</option><option value="beginner">零基础学生</option><option value="intermediate">有一定基础</option><option value="advanced">进阶学习者</option></select></label>
+        <p class="ai-disclosure">点击生成会把提取的资料文字发送至云渡 Claude，并产生 API 用量；只生成草稿，不会自动发布。扫描件暂不支持 OCR。</p>
+        <div class="ai-actions"><button id="studio-ai-generate" type="button" class="button button-primary" disabled>生成课程草稿与评价</button><button id="studio-ai-cancel" type="button" class="text-action hidden">停止等待</button><button id="studio-ai-resume" type="button" class="text-action hidden">恢复查询</button><button id="studio-ai-edit" type="button" class="text-action">我想手动编辑</button></div>
+        <div class="ai-stages"><span class="ai-stage">1 接收资料</span><span class="ai-stage">2 提取文字</span><span class="ai-stage">3 生成与检查</span><span class="ai-stage">4 教师确认</span></div>
+        <p id="studio-ai-status" role="status" aria-live="polite"></p>
+        <section id="studio-ai-result" class="hidden"><div class="ai-result-heading"><span class="section-kicker">草稿已准备好 · 尚未发布</span><h3>先看看 AI 整理得怎么样</h3><p id="studio-ai-coverage"></p></div><p id="studio-ai-summary"></p><div id="studio-ai-report"></div><details class="ai-candidate-details" open><summary>查看生成的课程草稿</summary><div id="studio-ai-candidate"></div></details><div class="ai-actions"><button id="studio-ai-apply" type="button" class="button button-primary" disabled>采用草稿，进入发布前预览</button><a id="studio-ai-original" class="text-action hidden" target="_blank" rel="noopener">对照原资料 ↗</a><button id="studio-ai-export" type="button" class="text-action">下载草稿与审阅记录</button></div><p class="ai-disclosure">这是 AI 建议，不是质量认证。采用前请确认资料重点、补充示例和练习是否合适。</p></section>
+      </section>
+      <input id="studio-source_notes" type="hidden">
+
+      <section class="studio-pane" data-pane="basics"><h3>这门课，准备怎么教？</h3><p class="supporting-copy">课程模式决定内容要求；附件不再是每门课的必选项。</p><input id="studio-mode" type="hidden" value="guided"><div class="studio-modes">
+      <button type="button" class="studio-mode" data-mode="resource"><b>资料阅读</b><small>文档 + 学习指引</small></button>
+      <button type="button" class="studio-mode" data-mode="video"><b>视频学习</b><small>视频 + 目标说明</small></button>
+      <button type="button" class="studio-mode" data-mode="guided"><b>分步讲解</b><small>短小节 + 具体示例</small></button>
+      <button type="button" class="studio-mode" data-mode="practice"><b>动手实践</b><small>任务 + 自查标准</small></button>
+      <button type="button" class="studio-mode" data-mode="blended"><b>混合课程</b><small>附件 + 分步内容</small></button></div><p id="studio-mode-help" class="studio-mode-help"></p>
+      <label class="field">课程名称 *<input id="studio-title" maxlength="120" placeholder="例如：第一次提交 PR，把修改说清楚"></label>
+      <label class="field">课程简介 *<textarea id="studio-description" maxlength="1000" rows="2" placeholder="用两句话说明这节课解决什么问题。"></textarea></label>
+      <div class="studio-three"><label class="field">课程分类<select id="studio-category"><option>技术</option><option>设计</option><option>商业</option><option>人文</option></select></label><label class="field">学习基础<select id="studio-level"><option value="beginner">零基础</option><option value="intermediate">有一定基础</option><option value="advanced">进阶</option></select></label><label class="field">预计时长（分钟）*<input id="studio-minutes" type="number" min="1" max="600" value="15"></label></div>
+      <label class="field">适合人群 *<input id="studio-audience" maxlength="300" placeholder="例如：第一次参与团队开发的同学"></label>
+      <label class="field">学习目标 *<textarea id="studio-objectives" maxlength="2000" rows="3" placeholder="每行一个可观察的目标，例如：能写出修改内容和验证方法"></textarea></label></section>
+      <section class="studio-pane hidden" data-pane="content"><h3>把内容组织成能学、能做的步骤</h3><p class="supporting-copy">分步讲解 / 混合课程至少有一节正文；动手实践必须填写任务和完成标准。</p>
+      <div class="studio-attachment"><h4>课程附件</h4><p id="studio-attachment-help"></p><label class="field">选择文件<input id="course-file" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.mp4,.mov"></label><small>支持 PDF、Word、PPT、MP4、MOV，最多 500MB。视频播放取决于浏览器对编码的支持。</small><p id="studio-file-label"></p><button type="button" class="text-action" id="studio-remove-file">撤销新选择（编辑时保留原附件）</button></div>
+      <div class="studio-section-toolbar"><h4>分步正文</h4><button type="button" class="button button-ghost" id="studio-add-section">＋ 添加小节</button></div><div id="studio-sections"></div>
+      <label class="field">示例 / 代码示范<textarea id="studio-example" maxlength="6000" rows="4" placeholder="给学生看一个完整的小例子，不要求执行代码。"></textarea></label>
+      <label class="field">动手任务<textarea id="studio-task" maxlength="4000" rows="3" placeholder="让学生完成什么？需要产出什么？"></textarea></label>
+      <label class="field">完成标准 / 自查清单<textarea id="studio-checklist" maxlength="2000" rows="3" placeholder="每行一项，供学生检查自己的产出。"></textarea></label>
+      <label class="field">参考思路（学生手动展开）<textarea id="studio-reference" maxlength="4000" rows="3" placeholder="提供解释或示范，不自动评分。"></textarea></label>
+      <p class="supporting-copy">此版本支持文本任务及账号草稿；没有在线代码执行、作业附件提交或自动评分。</p></section>
+      <section class="studio-pane hidden" data-pane="preview"><p id="studio-ai-review-note" class="ai-disclosure hidden">AI 草稿需教师核对。可在“上传资料 · AI 整理”查看来源与审阅；后续手工编辑不会自动重新评价。</p><p id="studio-preview-warning" class="studio-mode-help"></p><h2 id="studio-preview-title"></h2><div id="studio-preview-body"></div></section>
+      </div><aside class="studio-sidebar"><span class="section-kicker">课程结构</span><div id="studio-outline"></div><button type="button" class="text-action" id="studio-sample">填入一节示例课程</button></aside></div>
+      <div class="studio-footer"><div><button type="button" class="button button-ghost" id="studio-save-draft">保存本机草稿</button><button type="button" class="text-action" id="studio-restore-draft">恢复草稿</button><p id="studio-draft-status" role="status"></p></div><button type="submit" class="button button-primary" id="studio-submit">发布课程</button></div>
+      </fieldset><p id="studio-error" class="form-error" role="alert"></p></form>
     </div>
   </div>
 
@@ -187,8 +218,17 @@
   <div class="modal-backdrop hidden" id="learners-modal">
     <div class="modal learning-modal" role="dialog" aria-modal="true" aria-labelledby="learners-title">
       <button class="close-button" data-close-modal>×</button>
-      <div class="modal-heading"><span class="section-kicker">COURSE MEMBERS</span><h2 id="learners-title">学习人员</h2><p id="learners-description"></p></div>
-      <div id="learners-list" class="space-list"></div>
+      <div id="analytics-overview"><div class="modal-heading"><span class="section-kicker">LEARNING ANALYTICS</span><h2 id="learners-title">学习人员</h2><p id="learners-description"></p></div>
+      <div id="analytics-preview-note" class="analytics-notice hidden">本地效果预览 · 以下均为示例数据，不代表真实学生记录。</div>
+      <div id="analytics-stats" class="analytics-stats" aria-label="课程学习统计"></div>
+      <p class="analytics-definition">统计当前加入者；打开课时或已有进度计为开始学习，100% 计为完成。完成率反映进度，不代表知识掌握程度。</p>
+      <div class="analytics-tools"><label>搜索学生<input id="analytics-search" type="search" placeholder="输入学生昵称"></label><label>学习状态<select id="analytics-filter"><option value="all">全部状态</option><option value="not_started">未开始</option><option value="in_progress">学习中</option><option value="completed">已完成</option></select></label><button id="analytics-refresh" class="secondary-button" type="button">刷新数据</button></div>
+      <p id="analytics-result-count" aria-live="polite"></p>
+      <div id="learners-list" class="space-list" aria-live="polite"></div></div>
+      <section id="learner-detail" class="hidden" aria-label="当前课程学习者详情">
+        <button id="learner-back" class="detail-back" type="button">← 返回学习者列表</button>
+        <div id="learner-detail-content" aria-live="polite"></div>
+      </section>
     </div>
   </div>
 
@@ -231,6 +271,9 @@
   <script src="/frontend/features/missions/release-rescue.js"></script>
   <script src="/frontend/features/learning/study.js"></script>
   <script src="/frontend/features/tutor/study.js"></script>
+  <script src="/frontend/features/courses/analytics.js"></script>
+  <script src="/frontend/features/courses/studio.js"></script>
+  <script src="/frontend/features/courses/studio-ai.js"></script>
   <script src="/frontend/features/bootstrap.js"></script>
 </body>
 </html>
