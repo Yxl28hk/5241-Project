@@ -8,6 +8,7 @@ $$(".nav-link").forEach((button) => button.addEventListener("click", () => {
   }
   else if (button.dataset.view === "my-learning") $("#student-workbench").scrollIntoView({behavior:"smooth"});
   else if (button.dataset.view === "learning-profile") openLearningProfile();
+  else if (button.dataset.view === "admin-quiz") openAdminQuiz();
   else if (button.dataset.view === "admin-users") openAdminUsers();
 }));
 $("[data-scroll-courses]").addEventListener("click", () => $("#courses").scrollIntoView({ behavior: "smooth" }));

@@ -1,8 +1,12 @@
 """Course-grounded tutor with an honest, key-free guided mode."""
 
 import json
+import logging
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
+
+logger = logging.getLogger(__name__)
 
 
 def tutor_settings(app):
@@ -115,8 +119,10 @@ def model_answer(app, module, course, message, history, profile):
             *[{"role": item["role"], "content": item["content"]} for item in history],
             {"role": "user", "content": message},
         ],
-        "max_tokens": 900,
+        "max_tokens": 1800,
     }
+    if urlparse(settings["url"]).hostname == "openrouter.ai":
+        payload["reasoning"] = {"effort": "low"}
     try:
         req = Request(
             settings["url"],
@@ -129,21 +135,37 @@ def model_answer(app, module, course, message, history, profile):
         )
         with urlopen(req, timeout=25) as response:
             result = json.loads(response.read(1024 * 1024))
-        answer = result["choices"][0]["message"]["content"]
+        choice = result["choices"][0]
+        answer = choice["message"].get("content")
         if not isinstance(answer, str) or not answer.strip():
+            if choice.get("finish_reason") == "length":
+                raise TutorUnavailable(
+                    "模型推理占满了回答额度，请稍后重试。"
+                )
             raise ValueError("Empty tutor answer")
         return answer.strip()[:12000]
-    except (
-        HTTPError,
-        URLError,
-        TimeoutError,
-        OSError,
-        ValueError,
-        KeyError,
-        IndexError,
-        TypeError,
-    ) as error:
+    except HTTPError as error:
+        logger.warning("Tutor provider returned HTTP %s", error.code)
+        messages = {
+            401: "AI 服务认证失败，请检查服务端 API Key。",
+            402: "AI 服务额度不足或当前模型没有可用额度。",
+            403: "AI 服务拒绝了请求，请检查 API Key 权限或模型访问权限。",
+            404: "AI 接口地址或模型不可用，请检查服务端配置。",
+            429: "AI 服务当前请求过多，请稍后重试。",
+        }
+        message = messages.get(
+            error.code,
+            "AI 服务暂时不可用，请稍后重试或检查服务端日志。",
+        )
+        raise TutorUnavailable(message) from error
+    except (URLError, TimeoutError, OSError) as error:
+        logger.warning("Tutor provider connection failed: %s", type(error).__name__)
+        raise TutorUnavailable(
+            "无法连接 AI 服务，请检查网络或稍后重试。"
+        ) from error
+    except (ValueError, KeyError, IndexError, TypeError) as error:
+        logger.warning("Tutor provider returned an invalid response: %s", type(error).__name__)
         # Never leak upstream response bodies, URLs or credentials into the browser.
         raise TutorUnavailable(
-            "AI 服务暂时不可用，请重试，或切换到课时知识卡。"
+            "AI 服务返回了无法识别的响应，请稍后重试或检查服务端日志。"
         ) from error

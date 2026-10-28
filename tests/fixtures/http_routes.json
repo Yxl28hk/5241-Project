@@ -20,12 +20,36 @@
     "/api/profile/learning/<int:course_id>"
   ],
   [
+    "DELETE",
+    "/api/quiz/profile/reference"
+  ],
+  [
     "GET",
     "/"
   ],
   [
     "GET",
     "/<filename>"
+  ],
+  [
+    "DELETE",
+    "/api/admin/quiz/questions/<code>"
+  ],
+  [
+    "GET",
+    "/api/admin/quiz/questions"
+  ],
+  [
+    "PATCH",
+    "/api/admin/quiz/questions/<code>/active"
+  ],
+  [
+    "POST",
+    "/api/admin/quiz/questions"
+  ],
+  [
+    "PUT",
+    "/api/admin/quiz/questions/<code>"
   ],
   [
     "GET",
@@ -77,7 +101,23 @@
   ],
   [
     "GET",
+    "/api/quiz/overview"
+  ],
+  [
+    "GET",
+    "/api/quiz/result"
+  ],
+  [
+    "GET",
+    "/api/quiz/runs/<int:run_id>"
+  ],
+  [
+    "GET",
     "/avatars/<path:filename>"
+  ],
+  [
+    "GET",
+    "/game"
   ],
   [
     "GET",
@@ -142,6 +182,22 @@
   [
     "POST",
     "/api/missions/release-rescue/start"
+  ],
+  [
+    "POST",
+    "/api/quiz/profile/adopt"
+  ],
+  [
+    "POST",
+    "/api/quiz/runs"
+  ],
+  [
+    "POST",
+    "/api/quiz/runs/<int:run_id>/abandon"
+  ],
+  [
+    "POST",
+    "/api/quiz/runs/<int:run_id>/answer"
   ],
   [
     "POST",

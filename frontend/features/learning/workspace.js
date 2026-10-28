@@ -10,7 +10,15 @@ function lessonStatus(lesson) {
 function renderWorkspace() {
   const profile = pathData?.profile || {};
   $("#workbench-greeting").textContent = state.user ? `${state.user.name}，按自己的节奏，把下一步学扎实。` : "选择一个目标，让每一次学习都有方向。";
-  $("#profile-overview").innerHTML = `<div><dt>学习目标</dt><dd>${escapeHTML(goalLabels[profile.goal] || "尚未填写")}</dd></div><div><dt>基础水平</dt><dd>${escapeHTML(levelLabels[profile.level] || "待了解")}</dd></div><div><dt>每周投入</dt><dd>${profile.weekly_hours ? `${profile.weekly_hours} 小时` : "按自己的节奏"}</dd></div>`;
+  const quizReference = pathData?.quest?.reference;
+  // The reference can be null while runs and answers still exist (after a reset,
+  // or when only quick/revenge was played), so the reset button follows the
+  // real progress instead of the reference.
+  const hasQuestData = Boolean(quizReference || pathData?.quest?.has_progress);
+  $("#profile-overview").innerHTML = `<div><dt>学习目标</dt><dd>${escapeHTML(goalLabels[profile.goal] || "尚未填写")}</dd></div><div><dt>基础水平</dt><dd>${escapeHTML(levelLabels[profile.level] || "待了解")}</dd></div><div><dt>每周投入</dt><dd>${profile.weekly_hours ? `${profile.weekly_hours} 小时` : "按自己的节奏"}</dd></div><div><dt>闯关参考</dt><dd>${quizReference ? `${escapeHTML(levelLabels[quizReference.level] || quizReference.level)}<button class="text-action" id="quiz-adopt">采用</button>` : "尚未闯关"}${hasQuestData ? `<button class="text-action" id="quiz-clear">清空记录</button>` : ""}</dd></div>`;
+  if (quizReference && typeof adoptQuizLevel === "function") $("#quiz-adopt").onclick = adoptQuizLevel;
+  const questClearButton = hasQuestData ? $("#quiz-clear") : null;
+  if (questClearButton && typeof clearQuizReference === "function") questClearButton.onclick = clearQuizReference;
   $("#edit-learning-profile").textContent = profile.goal || profile.level ? "修改学习画像 ↗" : "完善学习画像 ↗";
   const active = pathData?.active_path;
   const resume = pathData?.modules.find(m => m.id === pathData.resume_course_id);
@@ -40,7 +48,7 @@ function renderPath() {
   $("#path-summary").textContent = pathData.active_path ? `${pathData.completed} / ${pathData.modules.length} 节已完成 · 完成率 ${pathData.completion_percent}%（由你确认）` : "可以先查看目录再选择；填写画像后会更新推荐，不会自动替你选课。";
   $("#path-progress").value = pathData.active_path ? pathData.completion_percent : 0;
   $("#path-list").innerHTML = pathData.active_path ? pathData.modules.map((m, i) => `<button class="path-card ${m.progress === 100 ? "finished" : ""}" data-lesson="${m.id}"><span class="path-number">${m.progress === 100 ? "✓" : String(i + 1).padStart(2, "0")}</span><span><small>${escapeHTML(m.stage)} · ${escapeHTML(m.duration)}${m.id === pathData.next_course_id ? " · 下一节未完成" : ""}</small><strong>${escapeHTML(m.title)}</strong><span>${escapeHTML(m.description)}</span><small class="lesson-state state-${lessonStatus(m)}">${statusLabels[lessonStatus(m)]}</small></span><span>↗</span></button>`).join("") : '<div class="path-empty">先从上方选择一条路径。你也可以在下方发现课程中自由学习。</div>';
-  $("#mission-best").textContent = pathData.mission.best_score === null ? "尚无完成成绩" : `历史最高 ${pathData.mission.best_score} / 100`;
+  renderQuestCard();
 }
 
 async function refreshPath() {
@@ -59,7 +67,7 @@ async function refreshPath() {
     $("#path-catalog").replaceChildren();
     $("#active-path-title").textContent = "开启你的学习路径";
     $("#path-progress").value = 0;
-    $("#mission-best").textContent = "尚未开始";
+    renderQuestCard();
     return false;
   }
   try {
@@ -193,9 +201,9 @@ function renderLessonState() {
     $("#completion-next-label").textContent = `${isFollowing ? "下一节" : "还有未完成课时"}：${next.title} · ${next.duration}`;
     $("#completion-next").textContent = isFollowing ? "继续下一节 →" : "继续未完成课时 →";
   } else if (pathComplete) {
-    completionTarget = {type:"mission"};
-    $("#completion-next-label").textContent = "把课程内容用于四个发布决策。Release Rescue · 约 3 分钟。";
-    $("#completion-next").textContent = "开始实践挑战 →";
+    completionTarget = {type:"quest"};
+    $("#completion-next-label").textContent = "用 18 道闯关题检验一下自己的起点。Level Quest · 约 5 分钟。";
+    $("#completion-next").textContent = "开始水平闯关 →";
   } else {
     completionTarget = {type:"workspace"};
     $("#completion-next-label").textContent = "本课已完成，可以回到工作台选择下一项学习内容。";
@@ -264,7 +272,7 @@ async function openLesson(courseId) {
 }
 $("#resume-learning").onclick = () => {
   if (!requireLogin("开始学习")) return;
-  if (pathData?.active_path && pathData.modules.length && pathData.next_course_id === null) startMission();
+  if (pathData?.active_path && pathData.modules.length && pathData.next_course_id === null) startQuest();
   else if (pathData?.active_path && pathData.resume_course_id) openLesson(pathData.resume_course_id);
   else $("#learning-path").scrollIntoView({behavior:"smooth"});
 };
@@ -288,7 +296,7 @@ $("#toggle-tutor").onclick = () => {
 };
 
 async function saveLessonProgress(value) {
-  if (!selectedLesson || progressSaving || lessonOpening) return;
+  if (!selectedLesson || progressSaving || lessonOpening) return false;
   const lesson = selectedLesson;
   const userId = state.user?.id;
   progressSaving = true;
@@ -301,7 +309,7 @@ async function saveLessonProgress(value) {
   $("#lesson-progress").textContent = "正在保存，请稍候…";
   try {
     await zhixingApi.updateProgress(lesson.id, value);
-    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return;
+    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return false;
     selectedLesson.progress = value;
     selectedLesson.status = value === 100 ? "completed" : "in_progress";
     selectedLesson.enrolled = true;
@@ -312,13 +320,15 @@ async function saveLessonProgress(value) {
     pendingProgressValue = null;
     $("#progress-retry").classList.add("hidden");
     const refreshed = await refreshPath();
-    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return;
+    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return false;
     $("#completion-refresh-note").textContent = refreshed ? "" : "完成状态已保存，首页刷新暂时失败；可稍后点击刷新进度。";
     showToast(value === 100 ? "本节已完成，查看回顾和下一步" : "已恢复为学习中，原位置保留");
+    return true;
   } catch(error) {
-    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return;
+    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return false;
     $("#progress-error").textContent = `保存失败：${error.message}。完成状态尚未更改，请重试。`;
     $("#progress-retry").classList.remove("hidden");
+    return false;
   } finally {
     progressSaving = false;
     $$("[data-save-progress]").forEach(b => b.disabled = false);
@@ -326,14 +336,130 @@ async function saveLessonProgress(value) {
     $("#completion-next").disabled = false;
     renderLessonNavigation();
     renderLessonState();
-    if (pendingProgressValue === null && value === 100 && userId === state.user?.id && selectedLesson?.id === lesson.id) {
+    if (pendingProgressValue === null && value === 100 && userId === state.user?.id && selectedLesson?.id === lesson.id && $("#completion-ai-modal").classList.contains("hidden")) {
       $("#completion-feedback").focus({preventScroll:true});
       $("#completion-feedback").scrollIntoView({block:"nearest", behavior:"smooth"});
     }
   }
 }
-$$("[data-save-progress]").forEach(button => button.onclick = () => saveLessonProgress(Number(button.dataset.saveProgress)));
+function openCompletionAssistant() {
+  if (!selectedLesson || progressSaving || lessonOpening) return;
+  $("#completion-ai-question").value = "";
+  $("#completion-ai-status").textContent = "";
+  $("#completion-ai-error").textContent = "";
+  $("#completion-ai-answer").textContent = "";
+  $("#completion-ai-mode").textContent = "";
+  $("#completion-ai-result").classList.add("hidden");
+  $("#completion-ai-done").classList.add("hidden");
+  $("#completion-ai-question").disabled = false;
+  $("#completion-ai-submit").classList.remove("hidden");
+  $("#completion-ai-cancel").classList.remove("hidden");
+  $("#completion-ai-submit").disabled = false;
+  $("#completion-ai-cancel").disabled = false;
+  $("#completion-ai-dismiss").disabled = false;
+  $("#completion-ai-modal").classList.remove("hidden");
+  $("#completion-ai-question").focus();
+}
+function closeCompletionAssistant() {
+  if ($("#completion-ai-submit").disabled) return;
+  $("#completion-ai-modal").classList.add("hidden");
+}
+async function skipCompletionAssistant() {
+  const lesson = selectedLesson;
+  const userId = state.user?.id;
+  if (!lesson || progressSaving || lessonOpening || $("#completion-ai-submit").disabled) return;
+
+  $("#completion-ai-submit").disabled = true;
+  $("#completion-ai-cancel").disabled = true;
+  $("#completion-ai-dismiss").disabled = true;
+  $("#completion-ai-error").textContent = "";
+  $("#completion-ai-status").textContent = "正在保存完成状态…";
+  try {
+    if (lesson.progress !== 100 && !await saveLessonProgress(100)) {
+      $("#completion-ai-error").textContent = $("#progress-error").textContent || "保存失败，请重试。";
+      $("#completion-ai-status").textContent = "完成状态未保存。";
+      return;
+    }
+    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return;
+
+    $("#completion-ai-modal").classList.add("hidden");
+    $("#completion-feedback").focus({preventScroll:true});
+    $("#completion-feedback").scrollIntoView({block:"nearest", behavior:"smooth"});
+  } finally {
+    $("#completion-ai-submit").disabled = false;
+    $("#completion-ai-cancel").disabled = false;
+    $("#completion-ai-dismiss").disabled = false;
+  }
+}
+async function submitCompletionAssistant(event) {
+  event.preventDefault();
+  const lesson = selectedLesson;
+  const userId = state.user?.id;
+  if (!lesson || progressSaving || lessonOpening || $("#completion-ai-submit").disabled) return;
+
+  const question = $("#completion-ai-question").value.trim();
+  const message = question
+    ? `我在学习「${lesson.title}」时有一个没理解的问题：${question}\n\n请先用通俗中文解释，再给出 1–3 条适合继续学习的建议。`
+    : `我刚学完「${lesson.title}」，目前没有具体疑问。请用通俗中文回顾本节重点，并给出 1–3 条适合继续学习的建议。`;
+  $("#completion-ai-submit").disabled = true;
+  $("#completion-ai-cancel").disabled = true;
+  $("#completion-ai-dismiss").disabled = true;
+  $("#completion-ai-done").classList.add("hidden");
+  $("#completion-ai-error").textContent = "";
+  $("#completion-ai-result").classList.add("hidden");
+  try {
+    $("#completion-ai-status").textContent = "正在保存本节完成状态…";
+    if (lesson.progress !== 100 && !await saveLessonProgress(100)) {
+      $("#completion-ai-error").textContent = $("#progress-error").textContent;
+      $("#completion-ai-status").textContent = "完成状态未保存，请修正问题后重试。";
+      return;
+    }
+    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return;
+
+    $("#completion-ai-status").textContent = "正在结合本节内容整理解释与学习建议…";
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    const result = await zhixingApi.askTutor({
+      course_id: lesson.id,
+      message,
+      context_key: "overview",
+      action: "answer",
+      mode: "auto",
+    }, {signal: controller.signal}).finally(() => clearTimeout(timeout));
+    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return;
+
+    $("#completion-ai-mode").textContent = result.mode === "live"
+      ? "AI 学习助手 · 大模型生成"
+      : "课时知识卡 · 规则式助手（未配置大模型）";
+    $("#completion-ai-answer").textContent = result.answer;
+    $("#completion-ai-result").classList.remove("hidden");
+    $("#completion-ai-status").textContent = "完成状态已保存。";
+    $("#completion-ai-question").disabled = true;
+    $("#completion-ai-submit").classList.add("hidden");
+    $("#completion-ai-cancel").classList.add("hidden");
+    $("#completion-ai-done").classList.remove("hidden");
+    $("#completion-ai-done").focus();
+  } catch (error) {
+    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return;
+    const reason = error.name === "AbortError" ? "请求超时" : error.message;
+    $("#completion-ai-error").textContent = `生成失败：${reason}。本节完成状态已保存，可以重试。`;
+    $("#completion-ai-status").textContent = "";
+  } finally {
+    $("#completion-ai-submit").disabled = false;
+    $("#completion-ai-cancel").disabled = false;
+    $("#completion-ai-dismiss").disabled = false;
+  }
+}
+$("#complete-lesson").onclick = openCompletionAssistant;
+$("#restart-lesson").onclick = () => saveLessonProgress(0);
 $("#progress-retry").onclick = () => { if (pendingProgressValue !== null) saveLessonProgress(pendingProgressValue); };
+$("#completion-ai-form").addEventListener("submit", submitCompletionAssistant);
+$("#completion-ai-cancel").onclick = skipCompletionAssistant;
+$("#completion-ai-dismiss").onclick = closeCompletionAssistant;
+$("#completion-ai-done").onclick = closeCompletionAssistant;
+$("#completion-ai-modal").addEventListener("click", event => {
+  if (event.target === $("#completion-ai-modal")) closeCompletionAssistant();
+});
 $("#postpone-lesson").onclick = async () => {
   if (!await closeModals()) return;
   $("#student-workbench").scrollIntoView({behavior:"smooth"});
@@ -342,6 +468,6 @@ $("#postpone-lesson").onclick = async () => {
 $("#completion-next").onclick = async () => {
   if (progressSaving || lessonOpening || !completionTarget) return;
   if (completionTarget.type === "lesson") openLesson(completionTarget.id);
-  else if (completionTarget.type === "mission") startMission();
+  else if (completionTarget.type === "quest") startQuest();
   else { if (await closeModals()) $("#student-workbench").scrollIntoView({behavior:"smooth"}); }
 };

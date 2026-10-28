@@ -96,6 +96,23 @@
       askTutor: (data, options) => json("POST", "/api/tutor", data, options),
       startMission: (options) => send("POST", "/api/missions/release-rescue/start", options),
       answerMission: (attemptId, data, options) => json("POST", `/api/missions/attempts/${id(attemptId)}/answer`, data, options),
+      getQuizOverview: (options) => request("/api/quiz/overview", options),
+      startQuizRun: (data, options) => json("POST", "/api/quiz/runs", data, options),
+      getQuizRun: (runId, options) => request(`/api/quiz/runs/${id(runId)}`, options),
+      answerQuiz: (runId, data, options) => json("POST", `/api/quiz/runs/${id(runId)}/answer`, data, options),
+      abandonQuizRun: (runId, options) => send("POST", `/api/quiz/runs/${id(runId)}/abandon`, options),
+      getQuizResult: (mode, options) => request(`/api/quiz/result?mode=${encodeURIComponent(mode || "quest")}`, options),
+      adoptQuizLevel: (options) => send("POST", "/api/quiz/profile/adopt", options),
+      clearQuizReference: (options) => send("DELETE", "/api/quiz/profile/reference", options),
+      // Admin-only question bank maintenance.
+      listQuizQuestions: (options) => request("/api/admin/quiz/questions", options),
+      createQuizQuestion: (data, options) => json("POST", "/api/admin/quiz/questions", data, options),
+      updateQuizQuestion: (code, data, options) =>
+        json("PUT", `/api/admin/quiz/questions/${encodeURIComponent(code)}`, data, options),
+      setQuizQuestionActive: (code, active, options) =>
+        json("PATCH", `/api/admin/quiz/questions/${encodeURIComponent(code)}/active`, { active }, options),
+      deleteQuizQuestion: (code, options) =>
+        send("DELETE", `/api/admin/quiz/questions/${encodeURIComponent(code)}`, options),
       // File endpoints return binary content: use these URLs in links, images or fetch.
       getUploadUrl: (filename) => `${base}/uploads/${encodeURIComponent(filename)}`,
       getAvatarUrl: (filename) => `${base}/avatars/${encodeURIComponent(filename)}`,

@@ -239,3 +239,43 @@ def test_user_content_is_text_and_legacy_pages_initialize(browser_page, legacy_s
     )
     assert_safe("#admin-users-list")
     assert not errors, errors
+
+
+def test_modal_close_preserves_teacher_jobs_student_reflection_and_notes(browser_page):
+    page, root, _ = browser_page
+    page.route(root + '/api/**', lambda route: route.fulfill(json={'user': None, 'courses': []}))
+    page.goto(root + '/')
+    page.wait_for_function("typeof studioBusy !== 'undefined' && typeof studioAIBusy !== 'undefined'")
+    page.evaluate("openModal('#upload-modal'); studioBusy = true")
+    assert page.evaluate('closeModals()') is False
+    assert page.locator('#upload-modal').is_visible()
+    page.evaluate('studioBusy = false; studioAIBusy = true')
+    page.keyboard.press('Escape')
+    assert page.locator('#upload-modal').is_visible()
+    page.evaluate('studioAIBusy = false')
+    assert page.evaluate('closeModals()') is True
+    assert page.locator('#upload-modal').is_hidden()
+
+    # The reflection overlays a lesson. Closing it must leave the lesson open.
+    page.evaluate("""() => {
+        openModal('#lesson-modal');
+        $('#completion-ai-modal').classList.remove('hidden');
+        $('#completion-ai-submit').disabled = true;
+        window.__notebookFlushes = 0;
+        flushNotebook = async () => { window.__notebookFlushes++; return false; };
+    }""")
+    assert page.evaluate('closeModals()') is False
+    assert page.locator('#completion-ai-modal').is_visible()
+    page.evaluate("$('#completion-ai-submit').disabled = false")
+    assert page.evaluate('closeModals()') is True
+    assert page.locator('#completion-ai-modal').is_hidden()
+    assert page.locator('#lesson-modal').is_visible()
+    assert page.evaluate('window.__notebookFlushes') == 0
+    assert page.evaluate("document.body.style.overflow") == 'hidden'
+    assert page.evaluate('closeModals()') is False
+    assert page.locator('#lesson-modal').is_visible()
+    assert page.evaluate('window.__notebookFlushes') == 1
+    page.evaluate('flushNotebook = async () => true')
+    assert page.evaluate('closeModals()') is True
+    assert page.locator('#lesson-modal').is_hidden()
+    assert page.evaluate("document.body.style.overflow") == ''

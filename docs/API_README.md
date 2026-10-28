@@ -103,7 +103,7 @@ HTTP 错误抛出 `ApiError`：`status` 为 HTTP 状态码，`body` 为后端完
 | `listUsers()` | GET `/api/admin/users` | `{ users }`，含课程及学习记录；仅管理员 |
 | `getLearningProfile()` | GET `/api/learning-profile` | `{ profile }`，当前账号画像 |
 | `updateLearningProfile(data)` | PATCH `/api/learning-profile` | 部分更新 `{ goal?, level?, weekly_hours? }` → `{ profile }` |
-| `getLearningPath()` | GET `/api/learning-path` | 完整学习快照，含 `catalog`、`active_path_id`、`modules`、`mission` 等 |
+| `getLearningPath()` | GET `/api/learning-path` | 完整学习快照，含 `catalog`、`active_path_id`、`modules`、`mission`、`quest` 等 |
 | `selectLearningPath(pathId)` | POST `/api/learning-path/select` | collaboration / quality / engineering → `{ active_path_id, message }` |
 | `getLesson(courseId)` | GET `/api/courses/<id>/lesson` | `{ lesson }`；含正文、progress、status、file_url |
 | `updateProgress(courseId, progress)` | PATCH `/api/courses/<id>/progress` | progress 为 0–100 整数；需先 startLearning → `{ progress }` |
@@ -116,6 +116,14 @@ HTTP 错误抛出 `ApiError`：`status` 为 HTTP 状态码，`body` 为后端完
 | `askTutor(data)` | POST `/api/tutor` | 必填 `{ course_id, message }`，其余见下文；返回 `{ answer, mode, label, context, conversation? }` |
 | `startMission()` | POST `/api/missions/release-rescue/start` | 创建或恢复未完成任务 → `{ attempt }` |
 | `answerMission(attemptId, data)` | POST `/api/missions/attempts/<id>/answer` | `{ step, choice_id }` → `{ attempt, feedback }` |
+| `getQuizOverview()` | GET `/api/quiz/overview` | `{ quest, reference }`，关卡状态与历史最佳；需登录 |
+| `startQuizRun(data)` | POST `/api/quiz/runs` | `{ mode }` 为 `quest`（默认）/ `quick` / `revenge`；创建或恢复未完成局 → `{ run }`；新建 201，恢复 200；复仇池为空返回 400 |
+| `getQuizRun(runId)` | GET `/api/quiz/runs/<id>` | `{ run }`；仅本人 |
+| `answerQuiz(runId, data)` | POST `/api/quiz/runs/<id>/answer` | `{ step, question_code, choice_id }` → `{ correct, explanation, run, level_result, finished }` |
+| `abandonQuizRun(runId)` | POST `/api/quiz/runs/<id>/abandon` | 结束本局并保留已答成绩 → `{ run, message }` |
+| `getQuizResult(mode)` | GET `/api/quiz/result?mode=<mode>` | `{ result, best_score, badge, reference }`；未完成时 `result` 为 null |
+| `adoptQuizLevel()` | POST `/api/quiz/profile/adopt` | 学生显式采用闯关参考作为基础水平 → `{ level, message }` |
+| `clearQuizReference()` | DELETE `/api/quiz/profile/reference` | 清空全部闯关数据（闯关局、答题记录、画像参考），不影响自报画像 → `{ message }`。**不可撤销，前端须先 `confirm`** |
 | `getUploadUrl(filename)` | GET `/uploads/<filename>` | 生成文件链接；不发请求 |
 | `getAvatarUrl(filename)` | GET `/avatars/<filename>` | 生成头像链接；不发请求 |
 
@@ -214,7 +222,64 @@ if (!attempt.complete) {
 
 总共四步，每步 25 分，75 分通过；使用返回的 step 和选项，不向服务器提交分数。重复或过期步骤返回 409。`startMission()` 恢复未完成记录；完成后再次调用才会创建新记录。
 
-## 8. 验证
+## 8. 水平闯关
+
+```javascript
+const { run } = await zhixingApi.startQuizRun();
+const result = await zhixingApi.answerQuiz(run.id, {
+  step: run.step,
+  question_code: run.question.code,
+  choice_id: run.question.choices[0].id,
+});
+console.log(result.correct, result.explanation, result.run);
+```
+
+共 3 关 × 6 题 = 18 题；每关答对 4 题解锁下一关，答错不扣分。服务端判定正确性，客户端不要提交分数或正确性。使用返回的 `step` 与 `question_code`，重复或过期步骤返回 409。`startQuizRun()` 恢复未完成记录；一局结束后才创建新的记录。
+
+### 三种模式
+
+| mode | 题数 | 关卡结算 | 计入历史最佳 / 徽章 / 画像 |
+| --- | --- | --- | --- |
+| `quest`（默认） | 18 | 有 | 是 |
+| `quick` | 8 | 无 | **否** |
+| `revenge` | ≤ 6（取自错题池） | 无 | **否** |
+
+```javascript
+const { run } = await zhixingApi.startQuizRun({mode: "quick"});
+const data = await zhixingApi.getQuizResult("quick");
+```
+
+`quest` 每局从 30 题题库里**分层抽样** 18 题，题目顺序在建局时冻结在 `answers.codes`，因此同一局内断点续玩不错位，跨局则不同。第 18 题恒为 Boss 综合大题。
+
+### 题目形态
+
+`run.question.kind` 决定渲染方式：
+
+| kind | 交互 | 提交 `choice_id` |
+| --- | --- | --- |
+| `single` | 点选即提交 | `"a"` |
+| `multi` | 多选后点「确认提交」；`pick_count` 为需选项数 | `"a,c"`（顺序无关） |
+| `order` | 依次点选排序后提交 | `"b,a,c,d"`（顺序有关） |
+
+`question.snippet` 非空时以代码块展示；`question.boss` 为 true 时是 Boss 题。仅第 3 关且 `quest` 模式会返回 `hearts_enabled` 与 `hearts`（3 颗心，答错扣 1，纯展示）。
+
+### 连击与人格标签
+
+| 字段 | 位置 | 说明 |
+| --- | --- | --- |
+| `run.streak` | 每次返回 run 的地方 | 当前连续答对题数，答错归零。**纯展示，不加分** |
+| `result.persona` | `GET /api/quiz/result?mode=quest` | 由维度正确率派生的趣味称号 `{id, icon, label, note}`，与按总分计算的 `badge` 并行展示 |
+
+```javascript
+// 连击只用于演出，score 始终等于答对题数
+if (result.run.streak >= 2) showCombo(result.run.streak);
+```
+
+**正确选项已打散**（`a` / `b` / `c` 各占约三分之一），不要假设答案是 A。若某条历史错题的 `your_choice` 与当前 `correct_choice_id` 重合，后端会把后者置为 `null`（题库选项重排导致），前端此时不显示"正确选项"那一段。
+
+闯关结果写入 `learning_profiles` 的 `quiz_*` 参考字段，**不会覆盖**学生自报的水平；只有学生显式调用 `adoptQuizLevel()` 才会写入 `level`。`clearQuizReference()` 只清空参考，不动自报画像。
+
+## 9. 验证
 
 ```powershell
 node --test tests/api.test.js

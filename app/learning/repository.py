@@ -14,6 +14,12 @@ def find_course(db, params):
     return db.execute("SELECT id FROM courses WHERE id = %s", params).fetchone()
 
 
+def find_course_type(db, params):
+    return db.execute(
+        "SELECT resource_type FROM courses WHERE id = %s", params
+    ).fetchone()
+
+
 def upsert_enrollment(db, params):
     return db.execute(
         """INSERT INTO learning_records (user_id, course_id) VALUES (%s, %s)

@@ -1,8 +1,15 @@
 """Explicit classroom content/account seeding; never runs on import."""
 
+from psycopg.types.json import Jsonb
 from werkzeug.security import generate_password_hash
 
 from app.learning.content import MODULES
+from app.quiz.content import (
+    ANCHOR_DESCRIPTION,
+    ANCHOR_DURATION,
+    QUEST_TITLE,
+    question_rows,
+)
 
 SEED_COURSES = [
     (
@@ -106,5 +113,52 @@ def seed_lessons(db):
         db.execute(
             "INSERT INTO prototype_courses (slug, course_id) VALUES (%s, %s)",
             (module["slug"], row["id"]),
+        )
+    db.commit()
+
+
+def seed_quiz(db):
+    """Idempotent quiz bank plus the anchor course that carries quiz answers."""
+    anchor = db.execute(
+        "SELECT id FROM courses WHERE resource_type = 'quiz' ORDER BY id LIMIT 1"
+    ).fetchone()
+    if anchor is None:
+        db.execute(
+            """INSERT INTO courses
+            (title, category, resource_type, description, author, duration, cover, badge)
+            VALUES (%s, '技术', 'quiz', %s, '知行软件工程实验室', %s, 'tech', '水平摸底')""",
+            (QUEST_TITLE, ANCHOR_DESCRIPTION, ANCHOR_DURATION),
+        )
+    for item in question_rows():
+        db.execute(
+            """INSERT INTO quiz_questions
+            (code, version, level, topic, difficulty, stem, snippet, kind, boss, choices,
+             correct_choice_id, explanation, explanations, source)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (code) DO UPDATE SET version = EXCLUDED.version,
+                level = EXCLUDED.level, topic = EXCLUDED.topic,
+                difficulty = EXCLUDED.difficulty, stem = EXCLUDED.stem,
+                snippet = EXCLUDED.snippet, kind = EXCLUDED.kind, boss = EXCLUDED.boss,
+                choices = EXCLUDED.choices,
+                correct_choice_id = EXCLUDED.correct_choice_id,
+                explanation = EXCLUDED.explanation,
+                explanations = EXCLUDED.explanations, active = TRUE
+            WHERE quiz_questions.source = 'seed'""",
+            (
+                item["code"],
+                item["version"],
+                item["level"],
+                item["topic"],
+                item["difficulty"],
+                item["stem"],
+                item["snippet"],
+                item["kind"],
+                item["boss"],
+                Jsonb(item["choices"]),
+                item["correct_choice_id"],
+                item["explanation"],
+                Jsonb(item["explanations"]),
+                item["source"],
+            ),
         )
     db.commit()

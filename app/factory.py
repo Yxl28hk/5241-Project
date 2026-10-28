@@ -37,9 +37,10 @@ def create_app(settings=None):
     from app.infrastructure.web import bp as web
     from app.learning.routes import bp as learning
     from app.missions.routes import bp as missions
+    from app.quiz.routes import bp as quiz
     from app.tutor.routes import bp as tutor
 
-    for blueprint in (web, auth, courses, learning, tutor, missions):
+    for blueprint in (web, auth, courses, learning, tutor, missions, quiz):
         app.register_blueprint(blueprint)
 
     from flask import session

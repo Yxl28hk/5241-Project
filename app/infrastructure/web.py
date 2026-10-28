@@ -16,13 +16,14 @@ SCRIPTS = (
     "features/navigation.js",
     "features/learning/workspace.js",
     "features/tutor/panel.js",
-    "features/missions/release-rescue.js",
+    "features/quiz/level-quest.js",
     "features/learning/study.js",
     "features/tutor/study.js",
     "features/courses/analytics.js",
     "features/courses/studio.js",
     "features/courses/studio-ai.js",
     "features/bootstrap.js",
+    "features/quiz/bank-admin.js",
 )
 PUBLIC_ASSETS = {*SCRIPTS, "styles/main.css", "styles/learning.css", "styles/teacher.css"}
 GAME_ASSETS = {"game.html", "game.css", "game.js"}

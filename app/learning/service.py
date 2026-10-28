@@ -10,6 +10,7 @@ from app.learning.paths import (
     learning_snapshot,
     learning_status,
     read_profile,
+    recommend_paths,
 )
 from app.learning.study import EXERCISES, notebook
 from app.missions import repository as mission_repository
@@ -48,8 +49,11 @@ def start_learning(course_id: int, *, user_id, get_db):
     from app.learning.paths import record_visit
 
     db = get_db()
-    if repository.find_course(db, (course_id,)) is None:
+    course = repository.find_course(db, (course_id,))
+    if course is None:
         return ({"error": "课程不存在"}, 404)
+    if repository.find_course_type(db, (course_id,))["resource_type"] == "quiz":
+        return ({"error": "这是闯关答题的载体，不作为课程开放"}, 400)
     repository.upsert_enrollment(db, (user_id, course_id))
     record_visit(db, user_id, course_id)
     db.commit()
@@ -105,6 +109,8 @@ def select_learning_path(*, user_id, data, get_db):
 def course_lesson(course_id, *, user_id, get_db):
     row = repository.find_lesson(get_db(), (user_id, course_id))
     if row is None:
+        return ({"error": "课程不存在或已下架"}, 404)
+    if repository.find_course_type(get_db(), (course_id,))["resource_type"] == "quiz":
         return ({"error": "课程不存在或已下架"}, 404)
     module = next((m for m in MODULES if m["slug"] == row["slug"]), {})
     from app.studio.authoring import read_studio
@@ -217,8 +223,19 @@ def save_notebook(course_id, *, user_id, data, get_db):
 def path(*, user_id, get_db):
     from app.learning.paths import learning_snapshot
 
+    from app.quiz import service as quiz_service
+
     db = get_db()
     result = learning_snapshot(db, user_id)
+    quest = quiz_service.card(user_id=user_id, get_db=get_db)
+    reference = quest.get("reference")
+    # Only students who never reported a level themselves get the quiz signal.
+    if reference and not result["profile"].get("level"):
+        result["recommendations"] = recommend_paths(
+            {**result["profile"], "level": reference["level"]},
+            [path for path in result["catalog"] if path["available"]],
+        )
+    result["quest"] = quest
     attempts = mission_repository.find_latest_mission(db, (user_id, MISSION["id"]))
     best = mission_repository.find_best_mission_score(
         db, (user_id, MISSION["id"], len(MISSION["steps"]))
