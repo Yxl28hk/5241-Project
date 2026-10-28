@@ -256,6 +256,30 @@
       <aside class="tutor-panel" id="tutor-panel"><div class="tutor-heading"><h3>学习助手</h3><button type="button" id="tutor-clear" class="text-action">新对话</button></div><small id="tutor-mode-label">课时知识卡 · 规则式助手（非大模型）</small><p id="tutor-context"></p><div class="focus-context"><span id="tutor-focus-label">提问范围：整节课</span><button class="text-action" id="clear-tutor-focus" type="button">回到整节课</button></div><div class="tutor-messages" id="tutor-messages" aria-live="polite"><p class="supporting-copy">围绕当前课时提问，或试试下面的快捷操作。</p></div><div class="prompt-chips"><button data-tutor-prompt="解释本课知识">解释本节</button><button data-tutor-prompt="举个例子">举个例子</button><button data-tutor-prompt="总结重点">总结重点</button><button data-tutor-prompt="给我一道练习">自测练习</button></div><div class="prompt-chips"><button id="tutor-hint" type="button">任务提示 1</button><button id="tutor-reference" type="button">查看任务参考思路</button><button id="tutor-restore" type="button">恢复账号会话</button></div><form id="tutor-form"><label class="field">你的问题<textarea id="tutor-question" required maxlength="1000" rows="3" placeholder="例如：为什么 CI 失败后不能直接合并？"></textarea></label><button class="button button-primary full-width" id="tutor-send">发送问题 →</button></form><p id="tutor-status" class="supporting-copy" role="status"></p><div id="tutor-retry-actions" class="lesson-actions hidden"><button class="button button-ghost" id="tutor-retry">重试</button><button class="button button-ghost" id="tutor-use-cards">查看课时知识卡</button></div><p class="supporting-copy">按账号和课时保存最近 20 轮；新对话会替换本课当前会话。不执行代码，不读取附件。</p></aside>
     </div>
   </div></div>
+  <div class="completion-ai-backdrop hidden" id="completion-ai-modal">
+    <section class="modal completion-ai-dialog" role="dialog" aria-modal="true" aria-labelledby="completion-ai-title">
+      <button class="close-button" id="completion-ai-dismiss" type="button" aria-label="关闭学习回顾">×</button>
+      <span class="section-kicker">REFLECT / GET GUIDANCE</span>
+      <h2 id="completion-ai-title">回顾</h2>
+      <p class="supporting-copy">有哪里没有理解吗？我们可以一起讨论学习；没有问题可以留空。</p>
+      <form id="completion-ai-form">
+        <label class="field" for="completion-ai-question">你的疑问（可选）</label>
+        <textarea id="completion-ai-question" maxlength="700" rows="4" placeholder="例如：我还不太明白，为什么合并前要先确认 CI 全部通过？"></textarea>
+        <p id="completion-ai-status" class="supporting-copy" role="status" aria-live="polite"></p>
+        <p id="completion-ai-error" class="form-error" role="alert"></p>
+        <section id="completion-ai-result" class="completion-ai-result hidden" aria-labelledby="completion-ai-result-title">
+          <span id="completion-ai-mode" class="section-kicker"></span>
+          <h3 id="completion-ai-result-title">解释与下一步建议</h3>
+          <div id="completion-ai-answer"></div>
+        </section>
+        <div class="lesson-actions completion-ai-actions">
+          <button class="button button-ghost" id="completion-ai-cancel" type="button">暂时跳过</button>
+          <button class="button button-primary" id="completion-ai-submit" type="submit">获取解释与学习建议 →</button>
+          <button class="button button-ghost hidden" id="completion-ai-done" type="button">返回课程，查看下一步</button>
+        </div>
+      </form>
+    </section>
+  </div>
   <div class="modal-backdrop hidden" id="quest-modal"><div class="modal quest-modal" role="dialog" aria-modal="true" aria-labelledby="quest-title"><button class="close-button" data-close-modal aria-label="关闭闯关">×</button><span class="section-kicker">LEVEL QUEST / SELF-CHECK</span><p id="quest-status" aria-live="polite"></p><div class="quest-hearts hidden" id="quest-hearts" aria-label="剩余机会"></div><progress id="quest-run-progress" max="18" value="0" aria-label="本局进度"></progress><div class="quest-boss hidden" id="quest-boss">⚔️ BOSS · 综合大题</div><h2 id="quest-title"></h2><p id="quest-topic" class="supporting-copy"></p><pre class="quest-snippet hidden" id="quest-snippet"></pre><p id="quest-stem"></p><div class="quest-choices" id="quest-choices"></div><button class="button button-primary hidden" id="quest-confirm">确认提交 ✓</button><div class="quest-feedback hidden" id="quest-feedback" aria-live="polite"></div><button class="button button-primary hidden" id="quest-next">下一题 →</button><div class="quest-summary hidden" id="quest-summary"></div><button class="button button-primary hidden" id="quest-retry">再挑战一次 ↻</button><button class="button button-ghost hidden" id="quest-to-path">查看推荐路径 →</button></div></div>
   <div class="toast hidden" id="toast" role="status"><span>✓</span><span id="toast-message">操作成功</span></div>
   <script src="/frontend/api/client.js"></script>
