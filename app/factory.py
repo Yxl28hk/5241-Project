@@ -43,6 +43,16 @@ def create_app(settings=None):
     for blueprint in (web, auth, courses, learning, tutor, missions, quiz):
         app.register_blueprint(blueprint)
 
+    from flask import session
+    from app.auth.security import teacher_or_admin_required
+    from app.courses.service import managed_course, course_json
+    from app.studio.authoring import register_studio
+    from app.studio.ai_routes import register_studio_ai
+    register_studio(app, get_db, teacher_or_admin_required,
+                    lambda course_id: managed_course(get_db(), session["user_id"], course_id),
+                    lambda course: course_json(get_db(), course))
+    register_studio_ai(app, get_db)
+
     @app.errorhandler(413)
     def file_too_large(_error):
         return {"error": "文件不能超过 500MB"}, 413

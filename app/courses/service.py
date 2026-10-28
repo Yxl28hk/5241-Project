@@ -121,3 +121,19 @@ def delete_course(course_id: int, *, user_id, get_db):
         if stored_file.is_file():
             stored_file.unlink()
     return {"message": "课程已删除"}
+
+
+def learner_detail(course_id, learner_id, *, actor_id, get_db):
+    db=get_db();course=managed_course(db,actor_id,course_id)
+    if course is None:return {"error":"没有权限查看该课程的学习人员"},404
+    learner=repository.learner_detail(db,course_id,learner_id)
+    if learner is None:return {"error":"该学习者当前未加入这门课程"},404
+    from app.learning.study import EXERCISES
+    definitions={item["version"]:item for item in EXERCISES.values()}
+    results=[]
+    for row in repository.learner_exercises(db,course_id,learner_id):
+        item=dict(row);definition=definitions.get(item["question_version"],{})
+        item["question"]=definition.get("question","历史版本练习（题干暂不可用）")
+        item["answer"]=next((c["text"] for c in definition.get("choices",[]) if c["id"]==item["choice_id"]),"历史选项（内容暂不可用）")
+        results.append(item)
+    return {"learner":dict(learner),"course":{"id":course_id,"title":course["title"]},"exercises":results}
