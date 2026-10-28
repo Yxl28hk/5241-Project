@@ -289,7 +289,7 @@ $("#toggle-tutor").onclick = () => {
 };
 
 async function saveLessonProgress(value) {
-  if (!selectedLesson || progressSaving || lessonOpening) return;
+  if (!selectedLesson || progressSaving || lessonOpening) return false;
   const lesson = selectedLesson;
   const userId = state.user?.id;
   progressSaving = true;
@@ -302,7 +302,7 @@ async function saveLessonProgress(value) {
   $("#lesson-progress").textContent = "正在保存，请稍候…";
   try {
     await zhixingApi.updateProgress(lesson.id, value);
-    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return;
+    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return false;
     selectedLesson.progress = value;
     selectedLesson.status = value === 100 ? "completed" : "in_progress";
     selectedLesson.enrolled = true;
@@ -313,13 +313,15 @@ async function saveLessonProgress(value) {
     pendingProgressValue = null;
     $("#progress-retry").classList.add("hidden");
     const refreshed = await refreshPath();
-    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return;
+    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return false;
     $("#completion-refresh-note").textContent = refreshed ? "" : "完成状态已保存，首页刷新暂时失败；可稍后点击刷新进度。";
     showToast(value === 100 ? "本节已完成，查看回顾和下一步" : "已恢复为学习中，原位置保留");
+    return true;
   } catch(error) {
-    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return;
+    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return false;
     $("#progress-error").textContent = `保存失败：${error.message}。完成状态尚未更改，请重试。`;
     $("#progress-retry").classList.remove("hidden");
+    return false;
   } finally {
     progressSaving = false;
     $$("[data-save-progress]").forEach(b => b.disabled = false);
@@ -327,14 +329,130 @@ async function saveLessonProgress(value) {
     $("#completion-next").disabled = false;
     renderLessonNavigation();
     renderLessonState();
-    if (pendingProgressValue === null && value === 100 && userId === state.user?.id && selectedLesson?.id === lesson.id) {
+    if (pendingProgressValue === null && value === 100 && userId === state.user?.id && selectedLesson?.id === lesson.id && $("#completion-ai-modal").classList.contains("hidden")) {
       $("#completion-feedback").focus({preventScroll:true});
       $("#completion-feedback").scrollIntoView({block:"nearest", behavior:"smooth"});
     }
   }
 }
-$$("[data-save-progress]").forEach(button => button.onclick = () => saveLessonProgress(Number(button.dataset.saveProgress)));
+function openCompletionAssistant() {
+  if (!selectedLesson || progressSaving || lessonOpening) return;
+  $("#completion-ai-question").value = "";
+  $("#completion-ai-status").textContent = "";
+  $("#completion-ai-error").textContent = "";
+  $("#completion-ai-answer").textContent = "";
+  $("#completion-ai-mode").textContent = "";
+  $("#completion-ai-result").classList.add("hidden");
+  $("#completion-ai-done").classList.add("hidden");
+  $("#completion-ai-question").disabled = false;
+  $("#completion-ai-submit").classList.remove("hidden");
+  $("#completion-ai-cancel").classList.remove("hidden");
+  $("#completion-ai-submit").disabled = false;
+  $("#completion-ai-cancel").disabled = false;
+  $("#completion-ai-dismiss").disabled = false;
+  $("#completion-ai-modal").classList.remove("hidden");
+  $("#completion-ai-question").focus();
+}
+function closeCompletionAssistant() {
+  if ($("#completion-ai-submit").disabled) return;
+  $("#completion-ai-modal").classList.add("hidden");
+}
+async function skipCompletionAssistant() {
+  const lesson = selectedLesson;
+  const userId = state.user?.id;
+  if (!lesson || progressSaving || lessonOpening || $("#completion-ai-submit").disabled) return;
+
+  $("#completion-ai-submit").disabled = true;
+  $("#completion-ai-cancel").disabled = true;
+  $("#completion-ai-dismiss").disabled = true;
+  $("#completion-ai-error").textContent = "";
+  $("#completion-ai-status").textContent = "正在保存完成状态…";
+  try {
+    if (lesson.progress !== 100 && !await saveLessonProgress(100)) {
+      $("#completion-ai-error").textContent = $("#progress-error").textContent || "保存失败，请重试。";
+      $("#completion-ai-status").textContent = "完成状态未保存。";
+      return;
+    }
+    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return;
+
+    $("#completion-ai-modal").classList.add("hidden");
+    $("#completion-feedback").focus({preventScroll:true});
+    $("#completion-feedback").scrollIntoView({block:"nearest", behavior:"smooth"});
+  } finally {
+    $("#completion-ai-submit").disabled = false;
+    $("#completion-ai-cancel").disabled = false;
+    $("#completion-ai-dismiss").disabled = false;
+  }
+}
+async function submitCompletionAssistant(event) {
+  event.preventDefault();
+  const lesson = selectedLesson;
+  const userId = state.user?.id;
+  if (!lesson || progressSaving || lessonOpening || $("#completion-ai-submit").disabled) return;
+
+  const question = $("#completion-ai-question").value.trim();
+  const message = question
+    ? `我在学习「${lesson.title}」时有一个没理解的问题：${question}\n\n请先用通俗中文解释，再给出 1–3 条适合继续学习的建议。`
+    : `我刚学完「${lesson.title}」，目前没有具体疑问。请用通俗中文回顾本节重点，并给出 1–3 条适合继续学习的建议。`;
+  $("#completion-ai-submit").disabled = true;
+  $("#completion-ai-cancel").disabled = true;
+  $("#completion-ai-dismiss").disabled = true;
+  $("#completion-ai-done").classList.add("hidden");
+  $("#completion-ai-error").textContent = "";
+  $("#completion-ai-result").classList.add("hidden");
+  try {
+    $("#completion-ai-status").textContent = "正在保存本节完成状态…";
+    if (lesson.progress !== 100 && !await saveLessonProgress(100)) {
+      $("#completion-ai-error").textContent = $("#progress-error").textContent;
+      $("#completion-ai-status").textContent = "完成状态未保存，请修正问题后重试。";
+      return;
+    }
+    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return;
+
+    $("#completion-ai-status").textContent = "正在结合本节内容整理解释与学习建议…";
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    const result = await zhixingApi.askTutor({
+      course_id: lesson.id,
+      message,
+      context_key: "overview",
+      action: "answer",
+      mode: "auto",
+    }, {signal: controller.signal}).finally(() => clearTimeout(timeout));
+    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return;
+
+    $("#completion-ai-mode").textContent = result.mode === "live"
+      ? "AI 学习助手 · 大模型生成"
+      : "课时知识卡 · 规则式助手（未配置大模型）";
+    $("#completion-ai-answer").textContent = result.answer;
+    $("#completion-ai-result").classList.remove("hidden");
+    $("#completion-ai-status").textContent = "完成状态已保存。";
+    $("#completion-ai-question").disabled = true;
+    $("#completion-ai-submit").classList.add("hidden");
+    $("#completion-ai-cancel").classList.add("hidden");
+    $("#completion-ai-done").classList.remove("hidden");
+    $("#completion-ai-done").focus();
+  } catch (error) {
+    if (userId !== state.user?.id || selectedLesson?.id !== lesson.id) return;
+    const reason = error.name === "AbortError" ? "请求超时" : error.message;
+    $("#completion-ai-error").textContent = `生成失败：${reason}。本节完成状态已保存，可以重试。`;
+    $("#completion-ai-status").textContent = "";
+  } finally {
+    $("#completion-ai-submit").disabled = false;
+    $("#completion-ai-cancel").disabled = false;
+    $("#completion-ai-dismiss").disabled = false;
+  }
+}
+$("#complete-lesson").onclick = openCompletionAssistant;
+$("#restart-lesson").onclick = () => saveLessonProgress(0);
 $("#progress-retry").onclick = () => { if (pendingProgressValue !== null) saveLessonProgress(pendingProgressValue); };
+$("#completion-ai-form").addEventListener("submit", submitCompletionAssistant);
+$("#completion-ai-cancel").onclick = skipCompletionAssistant;
+$("#completion-ai-dismiss").onclick = closeCompletionAssistant;
+$("#completion-ai-done").onclick = closeCompletionAssistant;
+$("#completion-ai-modal").addEventListener("click", event => {
+  if (event.target === $("#completion-ai-modal")) closeCompletionAssistant();
+});
 $("#postpone-lesson").onclick = async () => {
   if (!await closeModals()) return;
   $("#student-workbench").scrollIntoView({behavior:"smooth"});
