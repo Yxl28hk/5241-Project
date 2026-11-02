@@ -238,5 +238,33 @@
   [
     "GET",
     "/game"
+  ],
+  [
+    "POST",
+    "/api/auth/verification/request"
+  ],
+  [
+    "POST",
+    "/api/auth/verification/confirm"
+  ],
+  [
+    "POST",
+    "/api/auth/password/request"
+  ],
+  [
+    "POST",
+    "/api/auth/password/reset"
+  ],
+  [
+    "POST",
+    "/api/profile/teacher-application"
+  ],
+  [
+    "GET",
+    "/api/admin/teacher-applications"
+  ],
+  [
+    "POST",
+    "/api/admin/teacher-applications/<int:user_id>/review"
   ]
 ]

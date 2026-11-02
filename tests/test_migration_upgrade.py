@@ -25,7 +25,7 @@ def test_teacher_and_quiz_migrations_preserve_existing_content(previous):
                 db.commit()
                 old = () if previous == "fresh" else tuple(
                     name for name in ALL
-                    if (name != "005_course_studio.sql" if previous == "main"
+                    if name != "007_account_security.sql" and (name != "005_course_studio.sql" if previous == "main"
                         else name not in {"005_quiz.sql", "006_quiz_play.sql"})
                 )
                 apply_migrations(db, old)

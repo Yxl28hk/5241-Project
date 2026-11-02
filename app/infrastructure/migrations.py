@@ -8,7 +8,7 @@ LEARNING = ("002_learning.sql", "003_study.sql")
 # Keep published filenames stable: history is keyed by the complete filename.
 PROTOTYPE = (
     *LEARNING, "004_prototype.sql", "005_quiz.sql", "006_quiz_play.sql",
-    "005_course_studio.sql",
+    "005_course_studio.sql", "007_account_security.sql",
 )
 ALL = (*CORE, *PROTOTYPE)
 

@@ -22,6 +22,7 @@ SCRIPTS = (
     "features/courses/analytics.js",
     "features/courses/studio.js",
     "features/courses/studio-ai.js",
+    "features/auth/recovery.js",
     "features/bootstrap.js",
     "features/quiz/bank-admin.js",
 )
@@ -29,7 +30,7 @@ PUBLIC_ASSETS = {*SCRIPTS, "styles/main.css", "styles/learning.css", "styles/tea
 GAME_ASSETS = {"game.html", "game.css", "game.js"}
 LEGACY_BUNDLES = {
     # Original HTML loads only app.js / prototype.js / study.js, without api.js.
-    "app.js": SCRIPTS[:6] + ("features/courses/analytics.js", "features/courses/studio.js", "features/courses/studio-ai.js", "features/bootstrap.js",),
+    "app.js": SCRIPTS[:6] + ("features/courses/analytics.js", "features/courses/studio.js", "features/courses/studio-ai.js", "features/auth/recovery.js", "features/bootstrap.js",),
     "prototype.js": SCRIPTS[6:9],
     "study.js": SCRIPTS[9:11],
 }

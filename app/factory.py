@@ -28,8 +28,12 @@ def create_app(settings=None):
         TUTOR_API_KEY=config.TUTOR_API_KEY,
         TUTOR_MODEL=config.TUTOR_MODEL,
     )
+    for name in ("PUBLIC_BASE_URL", "MAIL_BACKEND", "MAIL_HOST", "MAIL_PORT", "MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_FROM", "MAIL_SECURITY"):
+        app.config[name] = getattr(config, name)
+    app.config["MAIL_OUTBOX"] = config.BASE_DIR / "instance" / "mail-outbox"
     if settings:
         app.config.update(settings)
+    app.config["SESSION_COOKIE_SECURE"] = app.config.get("PUBLIC_BASE_URL", "").startswith("https://")
     app.teardown_appcontext(close_db)
 
     from app.auth.routes import bp as auth
@@ -52,6 +56,20 @@ def create_app(settings=None):
                     lambda course_id: managed_course(get_db(), session["user_id"], course_id),
                     lambda course: course_json(get_db(), course))
     register_studio_ai(app, get_db)
+
+    @app.before_request
+    def reject_cross_site_writes():
+        from flask import request
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.path.startswith("/api/"):
+            origin = request.headers.get("Origin")
+            if request.headers.get("Sec-Fetch-Site") == "cross-site" or (origin and origin != request.host_url.rstrip("/")):
+                return {"error": "不允许跨站提交，请从本站页面重试"}, 403
+
+    from app.auth.lifecycle import bp as account_security
+    app.register_blueprint(account_security)
+
+    from app.auth.throttle import install_login_throttle
+    install_login_throttle(app)
 
     @app.errorhandler(413)
     def file_too_large(_error):

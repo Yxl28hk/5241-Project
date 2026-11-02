@@ -22,8 +22,8 @@ def register_studio_ai(app,get_db):
                 return 'local:'+session['studio_preview_id']
             return None
         if not session.get('user_id'):return None
-        user=get_db().execute('SELECT role FROM users WHERE id=%s',(session['user_id'],)).fetchone()
-        return 'user:'+str(session['user_id']) if user and user['role'] in {'teacher','admin'} else None
+        user=get_db().execute('SELECT role, session_version, verification_required, email_verified_at FROM users WHERE id=%s',(session['user_id'],)).fetchone()
+        return 'user:'+str(session['user_id']) if user and user['role'] in {'teacher','admin'} and user['session_version']==session.get('session_version',0) and (not user['verification_required'] or user['email_verified_at']) else None
 
     def csrf_ok():
         origin=request.headers.get('Origin')

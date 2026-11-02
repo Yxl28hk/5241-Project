@@ -12,6 +12,8 @@ bp = Blueprint("auth", __name__)
 @bp.get("/api/auth/me")
 def me():
     result = service.me(user_id=session.get("user_id"), get_db=get_db)
+    if not result["user"]:
+        session.clear()
     return result
 
 
@@ -30,7 +32,17 @@ def register():
     )
     body = result[0] if isinstance(result, tuple) else result
     if "user" in body:
+        session.clear()
         session["user_id"] = body["user"]["id"]
+        session["session_version"] = body.pop("_session_version", 0)
+        from app.auth.lifecycle import issue
+        from app.auth.mail import MailUnavailable
+        try:
+            issue(get_db(), body["user"], "verify")
+            body["message"] = "注册成功，请检查验证邮件；本地测试模式请查看本机收件目录。"
+        except MailUnavailable:
+            get_db().rollback()
+            body["message"] = "账号已创建，但邮件服务暂不可用。请联系管理员配置后，在个人资料中重新发送验证邮件。"
     return result
 
 
@@ -39,7 +51,9 @@ def login():
     result = service.login(data=request.get_json(silent=True), get_db=get_db)
     body = result[0] if isinstance(result, tuple) else result
     if "user" in body:
+        session.clear()
         session["user_id"] = body["user"]["id"]
+        session["session_version"] = body.pop("_session_version", 0)
     return result
 
 
@@ -79,4 +93,6 @@ def update_password():
         data=request.get_json(silent=True),
         get_db=get_db,
     )
+    if not isinstance(result, tuple):
+        session.clear()
     return result

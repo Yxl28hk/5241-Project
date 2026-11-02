@@ -47,7 +47,15 @@ def client(tmp_path, monkeypatch):
 
 
 def register(client, email="student@example.test", role="student"):
-    return client.post("/api/auth/register", json={"name":"Test Learner", "email":email, "password":"password123", "role":role})
+    response = client.post("/api/auth/register", json={"name":"Test Learner", "email":email, "password":"password123", "role":role})
+    if response.status_code == 201:
+        # These tests cover learning/course flows; verification and approval are
+        # explicitly provisioned here, and tested end-to-end in test_account_lifecycle.
+        with platform.app.app_context():
+            db = platform.get_db()
+            db.execute("UPDATE users SET email_verified_at=CURRENT_TIMESTAMP,role=%s,teacher_status=%s WHERE email=%s", (role, "approved" if role=="teacher" else "none", email))
+            db.commit()
+    return response
 
 
 def test_migrations_adopt_existing_schema_and_preserve_user_data(client):

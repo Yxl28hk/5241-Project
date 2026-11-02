@@ -279,3 +279,88 @@ def test_modal_close_preserves_teacher_jobs_student_reflection_and_notes(browser
     assert page.evaluate('closeModals()') is True
     assert page.locator('#lesson-modal').is_hidden()
     assert page.evaluate("document.body.style.overflow") == ''
+
+
+def test_login_submit_is_locked_until_failure_and_can_retry(browser_page):
+    page, root, _ = browser_page
+    page.route(root + '/api/**', lambda route: route.fulfill(json={'user': None, 'courses': []}))
+    page.goto(root + '/')
+    page.evaluate("""() => {
+        window.loginCalls = 0;
+        window.zhixingApi = {...zhixingApi, login: () => { window.loginCalls++; return new Promise((resolve, reject) => window.rejectLogin = reject); }};
+        switchAuth('login'); openModal('#auth-modal');
+    }""")
+    page.locator('#auth-email').fill('learner@example.test')
+    page.locator('#auth-password').fill('password123')
+    page.locator('#auth-submit').click()
+    assert page.locator('#auth-submit').is_disabled()
+    page.locator('#auth-password').press('Enter')
+    assert page.evaluate('window.loginCalls') == 1
+    page.evaluate("window.rejectLogin(new Error('邮箱或密码不正确'))")
+    page.wait_for_function("!document.querySelector('#auth-submit').disabled")
+    assert '邮箱或密码不正确' in page.locator('#auth-error').inner_text()
+    page.locator('#auth-submit').click()
+    assert page.evaluate('window.loginCalls') == 2
+    page.evaluate("window.rejectLogin(new Error('连接失败，请重试'))")
+    page.wait_for_function("!document.querySelector('#auth-submit').disabled")
+
+
+@pytest.mark.parametrize('purpose', ['verify', 'reset'])
+def test_account_links_require_confirmation_and_clear_fragment(browser_page, purpose):
+    page,root,_=browser_page
+    calls=[]
+    def respond(route):
+        calls.append((route.request.method,route.request.url,route.request.post_data))
+        route.fulfill(json={'user':None,'courses':[],'message':'操作成功'})
+    page.route(root+'/api/**',respond)
+    token='local-token-'+'a'*32
+    page.goto(root+'/#account-'+purpose+'='+token)
+    page.locator('#account-action-modal:not(.hidden)').wait_for()
+    assert '#' not in page.url
+    assert not any(method=='POST' for method,_,_ in calls)
+    if purpose=='reset':
+        page.locator('#recovery-password').fill('new-password123')
+        page.locator('#recovery-confirm').fill('different-password')
+        page.locator('#account-action-form button[type=submit]').click()
+        assert '两次密码不一致' in page.locator('#account-action-feedback').inner_text()
+        assert not any(method=='POST' for method,_,_ in calls)
+        page.locator('#recovery-confirm').fill('new-password123')
+    page.locator('#account-action-form button[type=submit]').click()
+    page.get_by_role('button',name='返回登录',exact=True).wait_for()
+    posts=[json.loads(body) for method,_,body in calls if method=='POST']
+    assert len(posts)==1 and posts[0]['token']==token
+    assert page.locator('#account-action-form button[type=submit]').is_disabled()
+
+
+def test_recovery_unconfigured_mail_shows_actionable_error(browser_page):
+    page,root,_=browser_page
+    page.route(root+'/api/**',lambda route:route.fulfill(json={'user':None,'courses':[]}))
+    page.route(root+'/api/auth/password/request',lambda route:route.fulfill(status=503,json={'error':'邮件服务尚未配置，请联系管理员。'}))
+    page.goto(root+'/')
+    page.locator('#user-menu').click()
+    page.locator('#forgot-password').click()
+    page.locator('#recovery-email').fill('test@example.test')
+    page.locator('#account-action-form button').click()
+    page.wait_for_function("document.querySelector('#account-action-feedback').textContent.includes('尚未配置')")
+    assert page.locator('#account-action-form button').is_enabled()
+
+
+def test_admin_teacher_review_interface_escapes_content(browser_page):
+    page,root,_=browser_page
+    page.route(root+'/api/**',lambda route:route.fulfill(json={'user':None,'courses':[],'users':[]}))
+    page.route(root+'/api/admin/teacher-applications',lambda route:route.fulfill(json={'applications':[{'id':7,'name':'<img src=x onerror=alert(1)>','email':'applicant@example.test','teacher_reason':'Teaching testing to beginners','email_verified_at':'2026-11-02'}]}))
+    reviews=[]
+    def review(route):
+        reviews.append(route.request.post_data_json);route.fulfill(json={'message':'审核已保存'})
+    page.route(root+'/api/admin/teacher-applications/7/review',review)
+    page.goto(root+'/')
+    page.evaluate("state.user={id:1,name:'Admin',role:'admin',is_admin:true};openAdminUsers()")
+    page.locator('#load-teacher-applications').click()
+    page.locator('#teacher-applications textarea').wait_for()
+    assert page.locator('#teacher-applications img').count()==0
+    page.locator('#teacher-applications [data-decision=approve]').click()
+    assert reviews==[]
+    page.locator('#teacher-applications textarea').fill('教学用途已确认')
+    page.locator('#teacher-applications [data-decision=approve]').click()
+    page.wait_for_function("document.querySelector('#teacher-applications [role=status]').textContent==='审核已保存'")
+    assert reviews==[{'decision':'approve','reason':'教学用途已确认'}]
