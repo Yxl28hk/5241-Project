@@ -431,7 +431,7 @@ def _select_questions(db, pool, mode, user_id):
 
 
 def start(*, user_id, mode="quest", get_db):
-    if mode not in MODE_TOTAL:
+    if not isinstance(mode, str) or mode not in MODE_TOTAL:
         return ({"error": "未知的闯关模式"}, 400)
     db = get_db()
     pool = _load_pool(db)
@@ -798,7 +798,7 @@ def _validate_question(data):
     code = code.strip()
 
     level = data.get("level")
-    if not isinstance(level, int) or level not in range(1, LEVEL_COUNT + 1):
+    if type(level) is not int or level not in range(1, LEVEL_COUNT + 1):
         return None, ({"error": f"关卡必须是 1 到 {LEVEL_COUNT} 之间的整数"}, 400)
 
     topic = data.get("topic")
@@ -806,7 +806,7 @@ def _validate_question(data):
         return None, ({"error": f"维度必须是 {TOPICS} 之一"}, 400)
 
     difficulty = data.get("difficulty")
-    if not isinstance(difficulty, int) or not 1 <= difficulty <= 3:
+    if type(difficulty) is not int or not 1 <= difficulty <= 3:
         return None, ({"error": "难度必须是 1 到 3 之间的整数"}, 400)
 
     kind = data.get("kind", "single")
@@ -826,7 +826,7 @@ def _validate_question(data):
             return None, ({"error": "每个选项都必须是对象"}, 400)
         choice_id = choice.get("id")
         text = choice.get("text")
-        if not isinstance(choice_id, str) or not choice_id.strip():
+        if not isinstance(choice_id, str) or not choice_id.strip() or "," in choice_id:
             return None, ({"error": "每个选项都需要一个编号"}, 400)
         if not isinstance(text, str) or not text.strip():
             return None, ({"error": "选项内容不能为空"}, 400)
@@ -837,12 +837,19 @@ def _validate_question(data):
     correct = data.get("correct_choice_id")
     if not isinstance(correct, str) or not correct.strip():
         return None, ({"error": "必须指定正确选项"}, 400)
-    correct = correct.strip()
-    for part in correct.split(","):
-        if part.strip() not in choice_ids:
+    parts = [part.strip() for part in correct.split(",")]
+    correct = ",".join(parts)
+    for part in parts:
+        if part not in choice_ids:
             return None, ({"error": f"正确选项 {part.strip()} 不在选项列表里"}, 400)
     if kind == "single" and "," in correct:
         return None, ({"error": "单选题只能有一个正确选项"}, 400)
+    if len(set(parts)) != len(parts):
+        return None, ({"error": "正确选项不能重复"}, 400)
+    if kind == "order" and set(parts) != set(choice_ids):
+        return None, ({"error": "排序题答案必须包含全部选项且各出现一次"}, 400)
+    if kind == "multi" and not 2 <= len(parts) < len(choice_ids):
+        return None, ({"error": "多选题至少需要两个正确选项及一个干扰选项"}, 400)
 
     explanation = data.get("explanation")
     if not isinstance(explanation, str) or not explanation.strip():
@@ -944,15 +951,26 @@ def create_question(data, *, get_db):
 
 
 def update_question(code, data, *, get_db):
+    if not isinstance(data, dict):
+        return ({"error": "请求内容格式不正确"}, 400)
     db = get_db()
     row = repository.find_question(db, (code,))
     if row is None:
         return ({"error": "题目不存在"}, 404)
+    if repository.count_question_answers(db, (row["version"],))["hits"]:
+        return ({"error": "这道题已有作答记录，不能改写历史题目。请停用原题并创建新题。"}, 409)
     # Merge onto the stored row so partial edits keep the untouched fields.
     merged = {**dict(row), **{k: v for k, v in data.items() if k != "code"}, "code": code}
     fields, error = _validate_question(merged)
     if error:
         return error
+    if row["active"]:
+        rows = [dict(item) for item in repository.list_questions(db)]
+        shortages = _pool_shortages([
+            {**item, **fields} if item["code"] == code else item for item in rows
+        ])
+        if shortages:
+            return _shortage_error(shortages)
     try:
         repository.update_question(
             db,

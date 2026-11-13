@@ -1,0 +1,35 @@
+Final report alignment / PR #5 merge review — 13 November 2026
+
+Scope: preserve the agreed modules; no new assignment/marking or cloud-draft scope.
+PR #5 includes teacher course preparation, learner details, and account security.
+Additional fixes validate malformed quiz/admin inputs, prevent invalid answer
+definitions and edits that break required question quotas, and reject content
+edits to questions with existing recorded answers (409; deactivate/create anew).
+Teacher email verification and administrator approval are intentionally retained.
+
+Report statements still requiring correction or a separately verified change:
+- Quick mode currently persists runs and answers; it does not update the formal
+  reference level. It must not be advertised as retaining no history.
+- Path estimates are 10/10/15 minutes; three paths reuse three built-in lessons.
+- Game debt accumulates by configured increments, not exponentially.
+- Teacher registration is an application, not immediate teacher authorization.
+- Uploaded-course tutoring is based on description/context available to the
+  tutor, not automatic full attachment reading. Teacher AI extraction is separate.
+- Architecture/API/database appendices must include studio and account security.
+- Teaching efficacy and live AI reliability are not established by unit tests.
+
+Validation: 109 offline Python tests pass; 10 JavaScript API tests pass.
+Offline Python checks mock persistence and use a fail-closed psycopg import
+boundary because Windows application control blocks the native driver.
+They do not validate real PostgreSQL persistence or migrations.
+No real SMTP or paid AI request was performed in this review.
+Eight Chrome browser scenarios also passed with mocked APIs: teacher modes,
+draft/preview, AI adoption/source attachment/failure preservation, learner details,
+login retry, verification/reset confirmation, missing-mail feedback, admin review.
+This validates UI behavior, not real service integration.
+
+Deployment: install requirements.txt, apply ALL_MIGRATIONS via the documented
+Flask migrate command, use a stable server session secret, and configure mail
+and server-side STUDIO_AI settings per ACCOUNT_SECURITY.md and TEACHER_STUDIO.md.
+Merging code does not restart an existing website or configure these services.
+Do not declare full report conformance or production readiness from merge alone.

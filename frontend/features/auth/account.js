@@ -28,7 +28,8 @@ function updateUserUI() {
     $("#user-avatar").textContent = "";
     $("#profile-avatar").textContent = "";
   }
-  if (typeof refreshPath === "function") refreshPath();
+  if (typeof renderAccountSecurity === "function") renderAccountSecurity();
+  if (typeof refreshPath === "function" && !(user?.verification_required && !user?.email_verified)) refreshPath();
 }
 function requireLogin(action) {
   if (!state.user) { openModal("#auth-modal"); showToast(`请先登录后再${action}`); return false; }
@@ -58,13 +59,21 @@ $("#user-menu").addEventListener("click", () => {
   }
 });
 $$(".auth-tab").forEach((tab) => tab.addEventListener("click", () => switchAuth(tab.dataset.authTab)));
+let authSubmitting = false;
 $("#auth-form").addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (authSubmitting) return;
+  authSubmitting = true;
+  const mode = state.authMode;
+  $("#auth-submit").disabled = true;
+  $$(".auth-tab").forEach(tab => tab.disabled = true);
+  $("#auth-error").textContent = "";
   const payload = { name: $("#auth-name").value.trim(), email: $("#auth-email").value.trim(), password: $("#auth-password").value, role: $("#auth-role").value };
   try {
-    const result = await zhixingApi[state.authMode === "login" ? "login" : "register"](payload);
-    state.user = result.user; updateUserUI(); closeModals(); showToast(state.authMode === "login" ? "登录成功，欢迎回来" : "注册成功，开始学习吧"); event.target.reset();
+    const result = await zhixingApi[mode === "login" ? "login" : "register"](payload);
+    state.user = result.user; updateUserUI(); closeModals(); showToast(result.message || (mode === "login" ? "登录成功，欢迎回来" : "注册成功，请先验证邮箱")); event.target.reset();
   } catch (error) { showError("#auth-error", error); }
+  finally { authSubmitting = false; $("#auth-submit").disabled = false; $$(".auth-tab").forEach(tab => tab.disabled = false); }
 });
 async function openAdminUsers() {
   if (!state.user?.is_admin) { showToast("需要管理员权限"); return; }
@@ -98,7 +107,7 @@ $("#password-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
     await zhixingApi.changePassword({ current_password: $("#current-password").value, new_password: $("#new-password").value });
-    event.target.reset(); $("#password-error").textContent = ""; showToast("密码修改成功");
+    event.target.reset(); $("#password-error").textContent = ""; state.user = null; updateUserUI(); await closeModals(); switchAuth("login"); openModal("#auth-modal"); showToast("密码已修改，其他设备也已退出，请重新登录");
   } catch (error) { showError("#password-error", error); }
 });
 $("#profile-logout").addEventListener("click", async () => {

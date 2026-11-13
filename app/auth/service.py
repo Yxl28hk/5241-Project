@@ -1,6 +1,7 @@
 """Auth business rules. HTTP parsing and session changes belong to routes."""
 
 from secrets import token_hex
+import re
 
 from psycopg.errors import UniqueViolation
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -15,6 +16,9 @@ def me(*, user_id, get_db):
     if not user_id:
         return {"user": None}
     user = repository.find_public_user(get_db(), (user_id,))
+    from flask import session
+    if user and user.get("session_version", 0) != session.get("session_version", 0):
+        return {"user": None}
     return {"user": user_json(user) if user else None}
 
 
@@ -43,13 +47,16 @@ def admin_users(*, get_db):
 
 
 def register(*, data, get_db):
-    data = data or {}
-    name = str(data.get("name", "")).strip()
+    if not isinstance(data, dict):
+        return ({"error": "请提交有效的表单对象"}, 400)
+    if any(not isinstance(data.get(key, ""), str) for key in ("name", "email", "password", "role")):
+        return ({"error": "注册信息格式不正确"}, 400)
+    name = data.get("name", "").strip()
     email = str(data.get("email", "")).strip().lower()
     password = str(data.get("password", ""))
     role = str(data.get("role", "student")).strip().lower()
-    if not name or not email or len(password) < 6:
-        return ({"error": "请填写昵称、有效邮箱和至少 6 位密码"}, 400)
+    if not 1 <= len(name) <= 40 or len(email) > 254 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email) or not 6 <= len(password) <= 128 or not password.strip():
+        return ({"error": "请填写 1–40 字昵称、有效邮箱和 6–128 位非空白密码"}, 400)
     if role not in {"student", "teacher"}:
         return ({"error": "请选择学生或教师角色"}, 400)
     db = get_db()
@@ -63,17 +70,22 @@ def register(*, data, get_db):
         db.rollback()
         return ({"error": "这个邮箱已经注册过了，请直接登录"}, 409)
     user = repository.find_registered_user(db, (user_id,))
-    return ({"user": user_json(user)}, 201)
+    return ({"user": user_json(user), "_session_version": user.get("session_version", 0)}, 201)
 
 
 def login(*, data, get_db):
-    data = data or {}
-    email = str(data.get("email", "")).strip().lower()
-    password = str(data.get("password", ""))
+    if not isinstance(data, dict):
+        return ({"error": "请提交有效的表单对象"}, 400)
+    if any(not isinstance(data.get(key), str) for key in ("email", "password")):
+        return ({"error": "请填写邮箱和密码"}, 400)
+    email = data["email"].strip().lower()
+    password = data["password"]
+    if not email or len(email) > 254 or not 1 <= len(password) <= 128:
+        return ({"error": "邮箱或密码格式不正确"}, 400)
     user = repository.find_user_by_email(get_db(), (email,))
     if user is None or not check_password_hash(user["password_hash"], password):
         return ({"error": "邮箱或密码不正确，请重试"}, 401)
-    return {"user": user_json(user)}
+    return {"user": user_json(user), "_session_version": user.get("session_version", 0)}
 
 
 def logout():
@@ -126,15 +138,23 @@ def update_profile(*, user_id, form, files, get_db):
 
 
 def update_password(*, user_id, data, get_db):
-    data = data or {}
-    current = str(data.get("current_password", ""))
+    if not isinstance(data, dict):
+        return ({"error": "请提交有效的表单对象"}, 400)
+    if any(not isinstance(data.get(key), str) for key in ("current_password", "new_password")):
+        return ({"error": "请填写当前密码和新密码"}, 400)
+    current = data["current_password"]
+    if len(current) > 128:
+        return ({"error": "当前密码格式不正确"}, 400)
     new_password = str(data.get("new_password", ""))
     user = repository.find_password_hash(get_db(), (user_id,))
     if not user or not check_password_hash(user["password_hash"], current):
         return ({"error": "当前密码不正确"}, 400)
-    if len(new_password) < 6:
-        return ({"error": "新密码至少需要 6 位"}, 400)
+    if not 6 <= len(new_password) <= 128 or not new_password.strip():
+        return ({"error": "新密码需要 6–128 位且不能全为空白"}, 400)
     db = get_db()
-    repository.update_password_hash(db, (generate_password_hash(new_password), user_id))
+    updated = repository.update_password_hash(db, (generate_password_hash(new_password), user_id, user["password_hash"]))
+    if updated.rowcount != 1:
+        db.rollback()
+        return ({"error": "密码已被其他请求修改，请重新登录"}, 409)
     db.commit()
     return {"message": "密码修改成功"}
