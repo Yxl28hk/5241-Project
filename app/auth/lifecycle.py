@@ -122,7 +122,7 @@ def applications():
 @admin_required
 def review(user_id):
     data = request.get_json(silent=True)
-    if not isinstance(data,dict) or data.get('decision') not in {'approve','reject'} or not isinstance(data.get('reason'),str) or not 1<=len(data['reason'].strip())<=1000:
+    if not isinstance(data,dict) or not isinstance(data.get('decision'),str) or data['decision'] not in {'approve','reject'} or not isinstance(data.get('reason'),str) or not 1<=len(data['reason'].strip())<=1000:
         return {'error':'请选择审核结论并填写 1–1000 字说明'},400
     db=get_db()
     user=db.execute('SELECT role,teacher_status,teacher_reason,email_verified_at FROM users WHERE id=%s FOR UPDATE',(user_id,)).fetchone()
