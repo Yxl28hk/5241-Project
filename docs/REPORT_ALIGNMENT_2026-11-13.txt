@@ -23,7 +23,10 @@ Offline Python checks mock persistence and use a fail-closed psycopg import
 boundary because Windows application control blocks the native driver.
 They do not validate real PostgreSQL persistence or migrations.
 No real SMTP or paid AI request was performed in this review.
-See the PR merge update for browser verification results.
+Eight Chrome browser scenarios also passed with mocked APIs: teacher modes,
+draft/preview, AI adoption/source attachment/failure preservation, learner details,
+login retry, verification/reset confirmation, missing-mail feedback, admin review.
+This validates UI behavior, not real service integration.
 
 Deployment: install requirements.txt, apply ALL_MIGRATIONS via the documented
 Flask migrate command, use a stable server session secret, and configure mail
