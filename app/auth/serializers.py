@@ -6,6 +6,8 @@ from typing import Any, Mapping
 def user_json(row: Mapping[str, Any]) -> dict:
     user = dict(row)
     user.pop("password_hash", None)
+    user.pop("session_version", None)
+    user["email_verified"] = bool(user.pop("email_verified_at", None))
     user["avatar_url"] = (
         f"/avatars/{user['avatar_filename']}" if user.get("avatar_filename") else None
     )

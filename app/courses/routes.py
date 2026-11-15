@@ -59,3 +59,9 @@ def delete_course(course_id):
         course_id, user_id=session.get("user_id"), get_db=get_db
     )
     return result
+
+
+@bp.get("/api/courses/<int:course_id>/learners/<int:user_id>")
+@teacher_or_admin_required
+def learner_detail(course_id,user_id):
+    return service.learner_detail(course_id,user_id,actor_id=session["user_id"],get_db=get_db)

@@ -94,7 +94,7 @@ def bank_update(code):
 @admin_required
 def bank_active(code):
     data = request.get_json(silent=True) or {}
-    if not isinstance(data.get("active"), bool):
+    if not isinstance(data, dict) or not isinstance(data.get("active"), bool):
         return {"error": "请指定启用或停用"}, 400
     return service.set_question_active(code, data["active"], get_db=get_db)
 

@@ -1,0 +1,36 @@
+Historical audit before account lifecycle implementation. The verification/recovery/teacher-review/session-revocation items below are addressed by docs/ACCOUNT_SECURITY.md.
+
+2026-11-02 application and authentication audit
+
+Source: upstream main 1eb5f90 plus teacher PR integration 2110cff.
+Local branch: audit-nov02. No changes pushed to GitHub.
+
+Fixed:
+- Reject non-object JSON and invalid field types in registration/login/password changes.
+- Bound nickname/email/password input; reject malformed email and blank passwords.
+- Clear previous session on successful login/registration; clear deleted-account sessions.
+- Check account existence on protected routes.
+- Reject browser cross-site API writes using Origin and Sec-Fetch-Site.
+- Bound login attempts per address/account (20/5 minutes), per address (100/5 minutes).
+- Prevent duplicate login submissions and allow retry after a failed request.
+- Batch quiz seed writes while retaining existing upsert and teacher-authored question preservation rules.
+
+Validation:
+- Python + Chrome suite: 93 passed, 48 database tests skipped in this run.
+- JavaScript API suite: 10 passed.
+- Real PostgreSQL isolated-schema auth smoke: registration, duplicate email, wrong password,
+  normalized email login, password change, old password rejection, logout and deletion passed.
+- Real PostgreSQL isolated-schema integration passed: migrations, course create/edit, attachments,
+  revision conflicts, student lesson/progress, learner analytics, role/ownership checks and quiz start.
+  The smoke-test schema was removed afterward.
+- Full remote database suite was interrupted due to excessive runtime; do not treat it as passed.
+- No live paid AI requests; AI integration uses mocked provider responses.
+
+Remaining product/deployment limitations:
+- Teacher registration is self-selected, with no identity approval workflow.
+- No verified-email or forgotten-password delivery workflow.
+- Password changes do not revoke every other existing signed-cookie session.
+- Login throttling and AI task queues are process-local; multi-worker deployment needs shared storage.
+- Stable SECRET_KEY, HTTPS cookies and reverse-proxy origin handling need deployment configuration.
+- Scanned PDFs require OCR which is not implemented.
+- This audit does not establish absence of all defects or readiness for public production use.

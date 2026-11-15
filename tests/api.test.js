@@ -20,6 +20,13 @@ test("all JSON business functions use the expected route, method and payload", a
   const cases = [
     ["getConfig", [], "GET", "/api/prototype/config"],
     ["getCurrentUser", [], "GET", "/api/auth/me"],
+    ["requestVerification", [], "POST", "/api/auth/verification/request", {}],
+    ["confirmVerification", [data], "POST", "/api/auth/verification/confirm", data],
+    ["requestPasswordReset", [data], "POST", "/api/auth/password/request", data],
+    ["resetPassword", [data], "POST", "/api/auth/password/reset", data],
+    ["applyTeacher", [data], "POST", "/api/profile/teacher-application", data],
+    ["teacherApplications", [], "GET", "/api/admin/teacher-applications"],
+    ["reviewTeacher", [7, data], "POST", "/api/admin/teacher-applications/7/review", data],
     ["register", [data], "POST", "/api/auth/register", data],
     ["login", [data], "POST", "/api/auth/login", data],
     ["logout", [], "POST", "/api/auth/logout"],

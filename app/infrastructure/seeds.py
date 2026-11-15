@@ -129,8 +129,9 @@ def seed_quiz(db):
             VALUES (%s, '技术', 'quiz', %s, '知行软件工程实验室', %s, 'tech', '水平摸底')""",
             (QUEST_TITLE, ANCHOR_DESCRIPTION, ANCHOR_DURATION),
         )
-    for item in question_rows():
-        db.execute(
+    rows = question_rows()
+    with db.cursor() as cursor:
+        cursor.executemany(
             """INSERT INTO quiz_questions
             (code, version, level, topic, difficulty, stem, snippet, kind, boss, choices,
              correct_choice_id, explanation, explanations, source)
@@ -144,7 +145,7 @@ def seed_quiz(db):
                 explanation = EXCLUDED.explanation,
                 explanations = EXCLUDED.explanations, active = TRUE
             WHERE quiz_questions.source = 'seed'""",
-            (
+            [(
                 item["code"],
                 item["version"],
                 item["level"],
@@ -159,6 +160,6 @@ def seed_quiz(db):
                 item["explanation"],
                 Jsonb(item["explanations"]),
                 item["source"],
-            ),
+            ) for item in rows],
         )
     db.commit()

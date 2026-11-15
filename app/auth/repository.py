@@ -3,7 +3,7 @@
 
 def find_public_user(db, params):
     return db.execute(
-        "SELECT id, name, email, avatar_filename, role FROM users WHERE id = %s", params
+        "SELECT id, name, email, avatar_filename, role, session_version, email_verified_at, verification_required, teacher_status FROM users WHERE id = %s", params
     ).fetchone()
 
 
@@ -35,14 +35,14 @@ def list_learning_records(db):
 
 def insert_user(db, params):
     return db.execute(
-        "INSERT INTO users (name, email, password_hash, role) VALUES (%s, %s, %s, %s) RETURNING id",
+        "INSERT INTO users (name, email, password_hash, role, verification_required, teacher_status) VALUES (%s, %s, %s, 'student', TRUE, CASE WHEN %s='teacher' THEN 'pending' ELSE 'none' END) RETURNING id",
         params,
     )
 
 
 def find_registered_user(db, params):
     return db.execute(
-        "SELECT id, name, email, role, avatar_filename FROM users WHERE id = %s", params
+        "SELECT id, name, email, role, avatar_filename, session_version, email_verified_at, verification_required, teacher_status FROM users WHERE id = %s", params
     ).fetchone()
 
 
@@ -86,7 +86,7 @@ def update_name(db, params):
 
 def find_updated_user(db, params):
     return db.execute(
-        "SELECT id, name, email, role, avatar_filename FROM users WHERE id = %s", params
+        "SELECT id, name, email, role, avatar_filename, session_version, email_verified_at, verification_required, teacher_status FROM users WHERE id = %s", params
     ).fetchone()
 
 
@@ -97,8 +97,8 @@ def find_password_hash(db, params):
 
 
 def update_password_hash(db, params):
-    return db.execute("UPDATE users SET password_hash = %s WHERE id = %s", params)
+    return db.execute("UPDATE users SET password_hash = %s, session_version=session_version+1 WHERE id = %s AND password_hash = %s", params)
 
 
 def find_role(db, user_id):
-    return db.execute("SELECT role FROM users WHERE id = %s", (user_id,)).fetchone()
+    return db.execute("SELECT role, session_version, verification_required, email_verified_at FROM users WHERE id = %s", (user_id,)).fetchone()

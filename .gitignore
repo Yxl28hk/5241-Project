@@ -12,3 +12,5 @@ work/
 uploads/*
 !uploads/.gitkeep
 .idea/
+
+instance/

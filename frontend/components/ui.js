@@ -9,6 +9,8 @@ function openModal(id) {
   document.body.style.overflow = "hidden";
 }
 async function closeModals() {
+  if(typeof studioBusy!=="undefined"&&studioBusy){showToast("课程正在保存，请稍候");return false;}
+  if(typeof studioAIBusy!=="undefined"&&studioAIBusy&&!$("#upload-modal").classList.contains("hidden")){showToast("请先停止等待，再关闭编辑器");return false;}
   const completionAssistant = $("#completion-ai-modal");
   if (completionAssistant && !completionAssistant.classList.contains("hidden")) {
     if ($("#completion-ai-submit").disabled) return false;

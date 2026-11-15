@@ -22,6 +22,60 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def test_teacher_analytics_preview_filter_and_detail(browser_page):
+    page,root,_=browser_page
+    page.route(root+'/api/**',lambda route:route.fulfill(json={'user':None,'courses':[]}))
+    page.goto(root+'/?preview=analytics')
+    page.locator('.analytics-row').first.wait_for()
+    assert page.locator('.analytics-stat strong').all_text_contents()==['5','4','2','40%']
+    page.locator('#analytics-filter').select_option('in_progress')
+    assert page.locator('.analytics-row').count()==2
+    page.locator('#analytics-filter').select_option('all')
+    page.locator('[data-learner-id="1"]').click()
+    assert '累计提交 2 次' in page.locator('#learner-detail-content').text_content()
+    page.locator('#learner-back').click()
+    page.locator('#analytics-search').fill('小周')
+    page.locator('[data-learner-id="3"]').click()
+    assert '暂无练习提交记录' in page.locator('#learner-detail-content').text_content()
+    page.set_viewport_size({'width':390,'height':844})
+    assert page.locator('#learners-modal .modal').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1')
+
+
+def test_teacher_studio_adoption_failure_and_source_attachment(browser_page):
+    from test_teacher_features import fixture_result
+    page,root,_=browser_page
+    result=fixture_result()
+    result.update(extraction={'total_pages':1,'readable_pages':1,'characters':120,'warnings':[]},sources=[],source={'filename':'sample.pptx'},model='mock')
+    result['course']['source_notes']='Test source reference'
+    result['course']['sections']=[{'title':'PR','body':'Explain your change'}]
+    failed=[False];errors=[]
+    page.on('pageerror',lambda error:errors.append(str(error)))
+    page.route(root+'/api/**',lambda route:route.fulfill(json={'user':None,'courses':[]}))
+    page.route('**/api/studio/ai/config*',lambda route:route.fulfill(json={'configured':True,'csrf':'mock','model':'mock'}))
+    def jobs(route):
+        if route.request.method=='POST':return route.fulfill(status=202,json={'job_id':'mock-job'})
+        return route.fulfill(json={'state':'error','stage':'generating','extraction':{'total_pages':1},'message':'Connection interrupted'} if failed[0] else {'state':'done','message':'Ready','result':result})
+    page.route('**/api/studio/ai/jobs**',jobs)
+    page.goto(root+'/?preview=studio')
+    page.locator('#studio-ai-file').set_input_files({'name':'sample.pptx','mimeType':'application/octet-stream','buffer':b'original fixture bytes'})
+    page.locator('#studio-ai-generate').click()
+    page.locator('#studio-ai-result:not(.hidden)').wait_for()
+    assert page.locator('#studio-title').input_value()==''
+    page.locator('#studio-ai-file').set_input_files({'name':'sample.pptx','mimeType':'application/octet-stream','buffer':b'different'})
+    page.locator('#studio-ai-apply').click()
+    assert page.locator('#studio-title').input_value()==result['course']['title']
+    assert page.locator('#course-file').evaluate('(e)=>e.files[0].size')==len(b'original fixture bytes')
+    assert page.locator('#studio-submit').is_disabled()
+    page.locator('[data-tab="ai"]').click();failed[0]=True
+    page.locator('#studio-ai-generate').click()
+    page.wait_for_function("document.querySelector('#studio-ai-status').textContent.includes('Connection interrupted')")
+    assert page.locator('#studio-title').input_value()==result['course']['title']
+    assert page.locator('.ai-stage.is-done').count()==2
+    page.set_viewport_size({'width':390,'height':844})
+    assert page.locator('.studio-modal').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1')
+    assert errors==[]
+
+
 @pytest.fixture
 def browser_page():
     playwright = pytest.importorskip("playwright.sync_api")
@@ -40,6 +94,9 @@ def browser_page():
             try:
                 page = browser.new_page()
                 page.set_default_timeout(10000)
+                # These are local regressions; font CDN availability is irrelevant.
+                page.route('https://fonts.googleapis.com/**', lambda route: route.abort())
+                page.route('https://fonts.gstatic.com/**', lambda route: route.abort())
                 yield page, f"http://127.0.0.1:{server.server_port}", application
             finally:
                 browser.close()
@@ -182,3 +239,128 @@ def test_user_content_is_text_and_legacy_pages_initialize(browser_page, legacy_s
     )
     assert_safe("#admin-users-list")
     assert not errors, errors
+
+
+def test_modal_close_preserves_teacher_jobs_student_reflection_and_notes(browser_page):
+    page, root, _ = browser_page
+    page.route(root + '/api/**', lambda route: route.fulfill(json={'user': None, 'courses': []}))
+    page.goto(root + '/')
+    page.wait_for_function("typeof studioBusy !== 'undefined' && typeof studioAIBusy !== 'undefined'")
+    page.evaluate("openModal('#upload-modal'); studioBusy = true")
+    assert page.evaluate('closeModals()') is False
+    assert page.locator('#upload-modal').is_visible()
+    page.evaluate('studioBusy = false; studioAIBusy = true')
+    page.keyboard.press('Escape')
+    assert page.locator('#upload-modal').is_visible()
+    page.evaluate('studioAIBusy = false')
+    assert page.evaluate('closeModals()') is True
+    assert page.locator('#upload-modal').is_hidden()
+
+    # The reflection overlays a lesson. Closing it must leave the lesson open.
+    page.evaluate("""() => {
+        openModal('#lesson-modal');
+        $('#completion-ai-modal').classList.remove('hidden');
+        $('#completion-ai-submit').disabled = true;
+        window.__notebookFlushes = 0;
+        flushNotebook = async () => { window.__notebookFlushes++; return false; };
+    }""")
+    assert page.evaluate('closeModals()') is False
+    assert page.locator('#completion-ai-modal').is_visible()
+    page.evaluate("$('#completion-ai-submit').disabled = false")
+    assert page.evaluate('closeModals()') is True
+    assert page.locator('#completion-ai-modal').is_hidden()
+    assert page.locator('#lesson-modal').is_visible()
+    assert page.evaluate('window.__notebookFlushes') == 0
+    assert page.evaluate("document.body.style.overflow") == 'hidden'
+    assert page.evaluate('closeModals()') is False
+    assert page.locator('#lesson-modal').is_visible()
+    assert page.evaluate('window.__notebookFlushes') == 1
+    page.evaluate('flushNotebook = async () => true')
+    assert page.evaluate('closeModals()') is True
+    assert page.locator('#lesson-modal').is_hidden()
+    assert page.evaluate("document.body.style.overflow") == ''
+
+
+def test_login_submit_is_locked_until_failure_and_can_retry(browser_page):
+    page, root, _ = browser_page
+    page.route(root + '/api/**', lambda route: route.fulfill(json={'user': None, 'courses': []}))
+    page.goto(root + '/')
+    page.evaluate("""() => {
+        window.loginCalls = 0;
+        window.zhixingApi = {...zhixingApi, login: () => { window.loginCalls++; return new Promise((resolve, reject) => window.rejectLogin = reject); }};
+        switchAuth('login'); openModal('#auth-modal');
+    }""")
+    page.locator('#auth-email').fill('learner@example.test')
+    page.locator('#auth-password').fill('password123')
+    page.locator('#auth-submit').click()
+    assert page.locator('#auth-submit').is_disabled()
+    page.locator('#auth-password').press('Enter')
+    assert page.evaluate('window.loginCalls') == 1
+    page.evaluate("window.rejectLogin(new Error('邮箱或密码不正确'))")
+    page.wait_for_function("!document.querySelector('#auth-submit').disabled")
+    assert '邮箱或密码不正确' in page.locator('#auth-error').inner_text()
+    page.locator('#auth-submit').click()
+    assert page.evaluate('window.loginCalls') == 2
+    page.evaluate("window.rejectLogin(new Error('连接失败，请重试'))")
+    page.wait_for_function("!document.querySelector('#auth-submit').disabled")
+
+
+@pytest.mark.parametrize('purpose', ['verify', 'reset'])
+def test_account_links_require_confirmation_and_clear_fragment(browser_page, purpose):
+    page,root,_=browser_page
+    calls=[]
+    def respond(route):
+        calls.append((route.request.method,route.request.url,route.request.post_data))
+        route.fulfill(json={'user':None,'courses':[],'message':'操作成功'})
+    page.route(root+'/api/**',respond)
+    token='local-token-'+'a'*32
+    page.goto(root+'/#account-'+purpose+'='+token)
+    page.locator('#account-action-modal:not(.hidden)').wait_for()
+    assert '#' not in page.url
+    assert not any(method=='POST' for method,_,_ in calls)
+    if purpose=='reset':
+        page.locator('#recovery-password').fill('new-password123')
+        page.locator('#recovery-confirm').fill('different-password')
+        page.locator('#account-action-form button[type=submit]').click()
+        assert '两次密码不一致' in page.locator('#account-action-feedback').inner_text()
+        assert not any(method=='POST' for method,_,_ in calls)
+        page.locator('#recovery-confirm').fill('new-password123')
+    page.locator('#account-action-form button[type=submit]').click()
+    page.get_by_role('button',name='返回登录',exact=True).wait_for()
+    posts=[json.loads(body) for method,_,body in calls if method=='POST']
+    assert len(posts)==1 and posts[0]['token']==token
+    assert page.locator('#account-action-form button[type=submit]').is_disabled()
+
+
+def test_recovery_unconfigured_mail_shows_actionable_error(browser_page):
+    page,root,_=browser_page
+    page.route(root+'/api/**',lambda route:route.fulfill(json={'user':None,'courses':[]}))
+    page.route(root+'/api/auth/password/request',lambda route:route.fulfill(status=503,json={'error':'邮件服务尚未配置，请联系管理员。'}))
+    page.goto(root+'/')
+    page.locator('#user-menu').click()
+    page.locator('#forgot-password').click()
+    page.locator('#recovery-email').fill('test@example.test')
+    page.locator('#account-action-form button').click()
+    page.wait_for_function("document.querySelector('#account-action-feedback').textContent.includes('尚未配置')")
+    assert page.locator('#account-action-form button').is_enabled()
+
+
+def test_admin_teacher_review_interface_escapes_content(browser_page):
+    page,root,_=browser_page
+    page.route(root+'/api/**',lambda route:route.fulfill(json={'user':None,'courses':[],'users':[]}))
+    page.route(root+'/api/admin/teacher-applications',lambda route:route.fulfill(json={'applications':[{'id':7,'name':'<img src=x onerror=alert(1)>','email':'applicant@example.test','teacher_reason':'Teaching testing to beginners','email_verified_at':'2026-11-02'}]}))
+    reviews=[]
+    def review(route):
+        reviews.append(route.request.post_data_json);route.fulfill(json={'message':'审核已保存'})
+    page.route(root+'/api/admin/teacher-applications/7/review',review)
+    page.goto(root+'/')
+    page.evaluate("state.user={id:1,name:'Admin',role:'admin',is_admin:true};openAdminUsers()")
+    page.locator('#load-teacher-applications').click()
+    page.locator('#teacher-applications textarea').wait_for()
+    assert page.locator('#teacher-applications img').count()==0
+    page.locator('#teacher-applications [data-decision=approve]').click()
+    assert reviews==[]
+    page.locator('#teacher-applications textarea').fill('教学用途已确认')
+    page.locator('#teacher-applications [data-decision=approve]').click()
+    page.wait_for_function("document.querySelector('#teacher-applications [role=status]').textContent==='审核已保存'")
+    assert reviews==[{'decision':'approve','reason':'教学用途已确认'}]

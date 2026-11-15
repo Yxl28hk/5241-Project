@@ -50,23 +50,6 @@ $("#course-grid").addEventListener("click", (event) => {
   const card = event.target.closest(".course-card");
   if (card) openCourse(state.courses.find((course) => String(course.id) === card.dataset.courseId));
 });
-$("#course-file").addEventListener("change", (event) => {
-  const file = event.target.files[0]; if (!file) return;
-  $("#file-name").textContent = file.name; $("#selected-file").classList.remove("hidden");
-});
-$("#remove-file").addEventListener("click", () => { $("#course-file").value = ""; $("#selected-file").classList.add("hidden"); });
-$("#upload-form").addEventListener("submit", async (event) => {
-  event.preventDefault(); if (!requireUploadPermission()) return;
-  const file = $("#course-file").files[0];
-  if (!file) { $("#upload-error").textContent = "请选择一个课程文件"; return; }
-  const form = new FormData();
-  form.append("title", $("#course-title").value.trim()); form.append("category", $("#course-category").value);
-  form.append("type", $("#course-type").value); form.append("description", $("#course-description").value.trim()); form.append("file", file);
-  try {
-    const result = await zhixingApi.createCourse(form);
-    state.courses.unshift(result.course); renderCourses(); closeModals(); event.target.reset(); $("#selected-file").classList.add("hidden"); showToast("课程发布成功，文件已保存");
-  } catch (error) { showError("#upload-error", error); }
-});
 async function openSpace(type) {
   if (!requireLogin("查看内容")) return;
   if (type === "uploads" && !state.user.can_upload) { showToast("学生账号没有资源管理权限"); return; }
@@ -84,11 +67,14 @@ async function openSpace(type) {
         <span class="space-item-info"><strong>${escapeHTML(course.title)}</strong><small>${isLearning ? `学习进度 ${progressPercent(course.progress)}% · ${escapeHTML(course.author)}` : `上传者 ${escapeHTML(course.author)} · ${escapeHTML(course.type.toUpperCase())}`}</small></span>
         ${isLearning ? `<span class="progress-track"><span style="width:${progressPercent(course.progress)}%"></span></span>` : ""}
         ${isLearning ? `<button class="delete-course stop-learning" type="button" data-stop-learning-id="${escapeHTML(course.id)}">停止学习</button>` : ""}
+        ${!isLearning ? `<button class="button button-ghost" type="button" data-edit-course-id="${escapeHTML(course.id)}">编辑课程</button>` : ""}
         ${!isLearning ? `<button class="delete-course manage-learners" type="button" data-manage-learners-id="${escapeHTML(course.id)}">学习人员 (${escapeHTML(course.learner_count || 0)})</button>` : ""}
         ${!isLearning ? `<button class="delete-course" type="button" data-delete-course-id="${escapeHTML(course.id)}">${isAdminResourceView ? "管理员删除" : "删除"}</button>` : ""}
       </div>`).join("") : `<div class="space-empty">${isLearning ? "还没有正在学习的课程，去发现一门好课吧。" : isAdminResourceView ? "平台内还没有课程。" : "你还没有上传课程。"}</div>`;
     openModal("#learning-modal");
     $$(".space-item").forEach((item) => item.addEventListener("click", async (event) => {
+      const editButton=event.target.closest("[data-edit-course-id]");
+      if(editButton){await openStudio(Number(editButton.dataset.editCourseId));return;}
       const manageButton = event.target.closest("[data-manage-learners-id]");
       if (manageButton) {
         event.stopPropagation();
@@ -126,32 +112,6 @@ async function openSpace(type) {
       }
       const course = result.courses.find((candidate) => String(candidate.id) === item.dataset.spaceCourseId);
       if (course) { closeModals(); openCourse(course); }
-    }));
-  } catch (error) { showToast(error.message); }
-}
-async function openLearners(courseId) {
-  try {
-    const result = await zhixingApi.listLearners(courseId);
-    const course = state.courses.find((candidate) => String(candidate.id) === String(courseId));
-    $("#learners-title").textContent = `${course?.title || "课程"} · 学习人员`;
-    $("#learners-description").textContent = `共 ${result.learners.length} 人正在学习`;
-    $("#learners-list").innerHTML = result.learners.length
-      ? result.learners.map((learner) => `
-        <div class="space-item learner-item">
-          <span class="author-avatar">${escapeHTML(learner.name.slice(0, 1))}</span>
-          <span class="space-item-info"><strong>${escapeHTML(learner.name)}</strong><small>学习进度 ${progressPercent(learner.progress)}%</small></span>
-          <button class="delete-course" type="button" data-remove-learner-id="${escapeHTML(learner.id)}">移除</button>
-        </div>`).join("")
-      : '<div class="space-empty">暂时还没有学习人员。</div>';
-    openModal("#learners-modal");
-    $$("#learners-list [data-remove-learner-id]").forEach((button) => button.addEventListener("click", async () => {
-      const learner = result.learners.find((item) => String(item.id) === button.dataset.removeLearnerId);
-      if (!learner || !window.confirm(`确定将 ${learner.name} 移出这门课程吗？`)) return;
-      try {
-        await zhixingApi.removeLearner(courseId, learner.id);
-        showToast("已移除学习人员");
-        await openLearners(courseId);
-      } catch (error) { showToast(error.message); }
     }));
   } catch (error) { showToast(error.message); }
 }

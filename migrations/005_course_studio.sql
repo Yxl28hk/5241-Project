@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS course_studio (
+    course_id BIGINT PRIMARY KEY REFERENCES courses(id) ON DELETE CASCADE,
+    content JSONB NOT NULL, revision INTEGER NOT NULL DEFAULT 1
+);
