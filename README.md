@@ -46,6 +46,14 @@ Flask CLI / WSGI 启动前先初始化：
 
 初始化已移出模块 import 阶段。多 worker 部署应单独执行一次初始化。Flask 内置服务仅用于本地演示。
 
+### Vercel 部署
+
+仓库中的 `vercel.json` 已将 `run.py` 显式配置为 Flask WSGI 入口，避免 Vercel 在
+`app/__init__.py` 和 `run.py` 之间无法选择入口。部署前请在 Vercel 项目环境变量中配置
+`DATABASE_URL` 和 `ZHIXING_SECRET_KEY`；需要管理员时再配置
+`ZHIXING_ADMIN_EMAIL` 和 `ZHIXING_ADMIN_PASSWORD`。数据库迁移和初始化应在部署前单独执行，
+不要放在模块导入阶段。
+
 | 环境变量 | 用途 |
 | --- | --- |
 | `DATABASE_URL` | 必填；Neon PostgreSQL connection string |
