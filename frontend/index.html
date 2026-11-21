@@ -75,7 +75,14 @@
       </section>
 
       <section class="student-workbench" id="student-workbench" aria-labelledby="workbench-title">
-        <div class="workbench-heading"><div><span class="section-kicker">YOUR LEARNING SPACE</span><h2 id="workbench-title">我的学习工作台</h2><p id="workbench-greeting">选择一个目标，让每一次学习都有方向。</p></div><div class="lesson-actions"><button class="button button-ghost" id="view-enrolled-courses">全部在学课程</button><button class="button button-ghost" id="edit-learning-profile">完善学习画像 ↗</button></div></div>
+        <div class="workbench-heading">
+          <div><span class="section-kicker">YOUR LEARNING SPACE</span><h2 id="workbench-title">我的学习工作台</h2><p id="workbench-greeting">选择一个目标，让每一次学习都有方向。</p></div>
+          <div class="lesson-actions">
+            <a class="button button-primary" id="workbench-ark-link" href="/game">进入迭代方舟 <span aria-hidden="true">↗</span></a>
+            <button class="button button-ghost" id="view-enrolled-courses">全部在学课程</button>
+            <button class="button button-ghost" id="edit-learning-profile">完善学习画像 ↗</button>
+          </div>
+        </div>
         <div class="workbench-grid">
           <article class="resume-card"><span class="section-kicker" id="resume-eyebrow">CONTINUE LEARNING</span><h3 id="resume-title">从一条适合你的路径开始</h3><p id="resume-description">登录后选择路径，学习位置和完成进度会保存在你的账号中。</p><p id="resume-path-label" class="supporting-copy"></p><button class="button button-primary" id="resume-learning">选择学习路径 →</button><button class="button button-ghost hidden" id="resume-view-path">查看当前路径</button><p id="next-lesson-label" class="supporting-copy"></p></article>
           <article class="profile-overview"><span class="section-kicker">YOUR STARTING POINT</span><h3>我的学习画像</h3><dl id="profile-overview"><div><dt>学习目标</dt><dd>尚未填写</dd></div><div><dt>基础水平</dt><dd>待了解</dd></div><div><dt>每周投入</dt><dd>按自己的节奏</dd></div></dl><p class="supporting-copy">由你填写，用于路径推荐。进度不代表能力评分。</p></article>
