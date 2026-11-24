@@ -22,8 +22,8 @@ async function studioAIReset(){
     const config=await zhixingApi.request(aiURL('/api/studio/ai/config'));if(epoch!==studioAIEpoch)return;
     studioAIConfig=config;
     $('#studio-ai-filename').textContent=aiFileHint();studioRefresh();
-    $('#studio-ai-model').textContent=config.configured?`云渡 · ${config.model}`:'AI 尚未配置';
-    aiStatus(config.configured?'上传你已有的资料，其余内容交给 AI 先整理。':'后端尚未配置可用的云渡接口，可使用高级编辑。',!config.configured);aiControls();
+    $('#studio-ai-model').textContent=config.configured?`AI · ${config.model}`:'AI 尚未配置';
+    aiStatus(config.configured?'上传你已有的资料，其余内容交给 AI 先整理。':'后端尚未配置可用的 AI 接口，可使用高级编辑。',!config.configured);aiControls();
     let saved;try{saved=JSON.parse(sessionStorage.getItem(aiJobKey())||'null');}catch{}
     if(saved?.id){studioAIJob=saved.id;studioAIBusy=true;aiControls();aiPoll(epoch);}
   }catch(error){if(epoch!==studioAIEpoch)return;aiStatus(error.message,true);aiControls();}

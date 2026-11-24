@@ -12,10 +12,14 @@ logger = logging.getLogger(__name__)
 
 def tutor_settings(app):
     if app.config.get("TUTOR_USE_STUDIO_AI"):
-        from app.studio.course_ai import ai_settings
+        from app.studio.course_ai import ai_settings, messages_endpoint, CourseAIError
         settings = ai_settings()
         base = settings["base"]
-        return {"url": base + ("/messages" if base.endswith("/v1") else "/v1/messages") if base else "",
+        try:
+            endpoint = messages_endpoint(base) if base else ""
+        except CourseAIError:
+            endpoint = ""
+        return {"url": endpoint,
                 "key": settings["key"], "model": settings["model"]}
     return {
         "url": app.config.get("TUTOR_API_URL", ""),

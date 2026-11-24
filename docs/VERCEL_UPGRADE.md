@@ -33,3 +33,7 @@ Use a dedicated test account and a small non-sensitive text PDF/PPTX:
 Local regression tests use isolated PostgreSQL schemas and mocked model responses; they do not verify the production provider key, team authorization or a deployment's environment values.
 
 References: [Vercel function duration](https://vercel.com/docs/functions/configuring-functions/duration), [function configuration](https://vercel.com/docs/project-configuration/vercel-json#functions), [payload limit](https://vercel.com/docs/errors/function_payload_too_large).
+
+## Teacher AI endpoint formats
+
+The teacher adapter uses Anthropic Messages format. For OpenRouter, use `STUDIO_AI_BASE_URL=https://openrouter.ai/api/v1` and a model supporting tool calls. A complete OpenRouter `/api/v1/chat/completions` URL is also normalized to `/api/v1/messages`; it must not have `/v1/messages` appended to it. Existing Claude-compatible service roots, `/v1` bases and full `/v1/messages` endpoints remain supported. Other providers need a Messages-compatible endpoint. Keys remain in server environment variables, never in the repository.
