@@ -22,13 +22,19 @@ def read_message(response,on_progress=None,deadline=None):
         while chunks[-1]:chunks.append(line())
         return json.loads(b''.join(chunks))
     message=None;blocks={};fragments={};closed=set();data=[];received=False
-    if on_progress:on_progress('云渡已建立连接，正在生成课程草稿…')
+    if on_progress:on_progress('AI 服务已建立连接，正在生成课程草稿…')
+    def usage(value):
+        if value is None:return {}
+        if not isinstance(value,dict):raise StreamError('invalid_response')
+        return value
     def event(payload):
         nonlocal message,received
         item=json.loads(payload)
         kind=item.get('type')
         if kind=='error':raise StreamError('provider_stream_error')
-        if kind=='message_start':message=item['message'];message['content']=[]
+        if kind=='message_start':
+            message=item['message'];message['content']=[]
+            message['usage']=usage(message.get('usage'))
         elif kind=='content_block_start':
             index=item['index']
             if index in blocks:raise StreamError('invalid_response')
@@ -45,14 +51,19 @@ def read_message(response,on_progress=None,deadline=None):
         elif kind=='content_block_stop':
             index=item['index']
             if index not in blocks or index in closed:raise StreamError('invalid_response')
-            if index in fragments:blocks[index]['input']=json.loads(''.join(fragments.pop(index)))
+            # The stop reason arrives after this block. A token-limited tool call
+            # can end inside a JSON string; wait for the final message before parsing.
             closed.add(index)
         elif kind=='message_delta':
             if message is None:raise StreamError('invalid_response')
             message.update(item.get('delta',{}))
-            message.setdefault('usage',{}).update(item.get('usage',{}))
+            message['usage'].update(usage(item.get('usage')))
         elif kind=='message_stop':
             if message is None or not blocks or set(blocks)!=closed:raise StreamError('incomplete_response')
+            if message.get('stop_reason')=='max_tokens':raise StreamError('output_limit')
+            for index,parts in fragments.items():
+                try:blocks[index]['input']=json.loads(''.join(parts))
+                except ValueError:raise StreamError('invalid_tool_json') from None
             message['content']=[blocks[i] for i in sorted(blocks)]
             return message
         return None
