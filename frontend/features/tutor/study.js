@@ -1,5 +1,10 @@
 function focusTitle(key) {
   const guide=selectedLesson?.guide;
+  const studio=selectedLesson?.studio;
+  if (studio) {
+    if (key.startsWith("section-")) return studio.sections?.[Number(key.slice(8))]?.title || "整节课";
+    return key==="example" ? "课程示例" : key==="task" ? "动手任务" : "整节课";
+  }
   if (key.startsWith("section-")) return guide?.sections[Number(key.slice(8))]?.title || "整节课";
   return key==="example" ? guide?.example.title : key==="task" ? guide?.task.title : key==="exercise" ? "本节固定练习" : "整节课";
 }
@@ -13,8 +18,8 @@ function renderHintButtons() {
   const steps=(studyConversation?.messages || []).filter(m=>m.role==="assistant" && m.context_key===key && m.action==="hint").map(m=>m.hint_step || 0);
   const step=steps.length?Math.max(...steps):0;
   $("#tutor-hint").textContent=step>=2?"两步提示已提供":`任务提示 ${step+1}`;
-  $("#tutor-hint").disabled=tutorPending || !selectedLesson?.guide || step>=2;
-  $("#tutor-reference").disabled=tutorPending || !selectedLesson?.guide;
+  $("#tutor-hint").disabled=tutorPending || !(selectedLesson?.guide || selectedLesson?.studio?.task) || step>=2;
+  $("#tutor-reference").disabled=tutorPending || !(selectedLesson?.guide || (selectedLesson?.studio?.task && selectedLesson?.studio?.reference));
 }
 function renderConversation(conversation) {
   studyConversation=conversation;
@@ -59,17 +64,17 @@ async function sendStudyTutor(question,{retry=false,mode="auto",action="answer",
   if (retry && mode==="guided-demo" && failedTutorRequest) payload={...failedTutorRequest,mode,request_id:crypto.randomUUID()};
   if (!retry) tutorMessage("你",question);
   setTutorBusy(true);
-  $("#tutor-status").textContent="正在结合所选内容整理回答…";
+  $("#tutor-status").textContent=payload.action==="reference" ? "正在读取已发布的参考思路…" : payload.mode==="guided-demo" ? "正在读取课程原文 / 知识卡…" : "正在读取本课资料并请求 AI，可能需要约 1–2 分钟…";
   $("#tutor-retry-actions").classList.add("hidden");
   tutorController=new AbortController();
-  const controller=tutorController,timeout=setTimeout(()=>controller.abort(),30000);
+  const controller=tutorController,timeout=setTimeout(()=>controller.abort(),180000);
   try {
     const result=await zhixingApi.askTutor(payload, {signal:controller.signal});
     if (!studyIsCurrent(lessonId,userId,epoch)) return;
     renderConversation(result.conversation);
     if ($("#tutor-question").value.trim()===question) $("#tutor-question").value="";
     failedTutorRequest=null;failedQuestion="";
-    $("#tutor-status").textContent=result.mode==="live"?"回答与会话已保存，请结合课程核实。":"预设知识卡 / 提示已保存，未调用大模型。";
+    $("#tutor-status").textContent=result.mode==="live"?"回答与会话已保存，请结合课程核实。":"课程原文 / 预设提示已保存，未调用大模型。";
   } catch(error) {
     if (!studyIsCurrent(lessonId,userId,epoch)) return;
     failedTutorRequest=payload;failedQuestion=question;

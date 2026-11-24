@@ -20,8 +20,6 @@ test("all JSON business functions use the expected route, method and payload", a
   const cases = [
     ["getConfig", [], "GET", "/api/prototype/config"],
     ["getCurrentUser", [], "GET", "/api/auth/me"],
-    ["requestVerification", [], "POST", "/api/auth/verification/request", {}],
-    ["confirmVerification", [data], "POST", "/api/auth/verification/confirm", data],
     ["requestPasswordReset", [data], "POST", "/api/auth/password/request", data],
     ["resetPassword", [data], "POST", "/api/auth/password/reset", data],
     ["applyTeacher", [data], "POST", "/api/profile/teacher-application", data],
@@ -145,6 +143,14 @@ test("request options preserve cancellation, keepalive and custom headers", asyn
   for (const error of [new TypeError("offline"), new DOMException("cancelled", "AbortError")]) {
     const client = createApiClient({ fetchImpl: async () => { throw error; } });
     await assert.rejects(client.getConfig(), (caught) => caught === error);
+  }
+});
+
+test("hosted HTML errors explain file limits and retain HTTP status", async () => {
+  for (const [status, expected] of [[413, "上传限制"], [504, "恢复查询"]]) {
+    const { client, calls } = fixture({ ok: false, status, json: async () => { throw new SyntaxError(); } });
+    await assert.rejects(client.getConfig(), error => error instanceof ApiError && error.status === status && error.message.includes(expected));
+    assert.equal(calls.length, 1);
   }
 });
 

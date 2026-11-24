@@ -12,7 +12,7 @@ def reset_conversation_revision(db, params):
 
 def find_course_context(db, params):
     return db.execute(
-        """SELECT c.id, c.title, c.description, p.slug, COALESCE(l.progress, 0) AS progress
+        """SELECT c.id, c.title, c.description, c.filename, p.slug, COALESCE(l.progress, 0) AS progress
             FROM courses c LEFT JOIN prototype_courses p ON p.course_id = c.id
             LEFT JOIN learning_records l ON l.course_id = c.id AND l.user_id = %s WHERE c.id = %s""",
         params,

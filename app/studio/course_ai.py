@@ -144,7 +144,8 @@ def request_course(extracted,audience,on_progress=None):
         handlers=[NoRedirect()]
         if os.environ.get('STUDIO_AI_NETWORK_MODE')=='direct':handlers.append(ProxyHandler({}))
         with build_opener(*handlers).open(req,timeout=90) as response:
-            result=read_message(response,on_progress,deadline=started+300)
+            # Keep parser + model + a final socket wait below the hosted 300s limit.
+            result=read_message(response,on_progress,deadline=started+(150 if os.environ.get('VERCEL')=='1' else 300))
     except HTTPError as error:
         message={401:'云渡密钥验证失败，请检查后端配置。',403:'当前密钥分组无权调用所选模型。',429:'云渡请求限流或额度不足，请稍后重试。'}.get(error.code,'云渡服务调用失败，请稍后重试。')
         raise failure('http_'+str(error.code),message,error) from None

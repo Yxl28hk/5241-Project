@@ -2,6 +2,7 @@
 let studioAIBusy=false,studioAIConfig=null,studioAIResult=null,studioAIJob=null,studioAITimer=null,studioAIEpoch=0,studioAISource=null,studioAIJobSource=null,studioAIObjectURL=null;
 function aiURL(path){return path+(studioPreview?'?preview=1':'');}
 function aiJobKey(){return 'zhixing:ai-job:'+(studioPreview?'preview':state.user?.id);}
+function aiFileHint(){return `支持文字型 PDF / PPTX · 最多 ${studioAIConfig?.max_mb||3}MB、60 页`;}
 function aiStatus(message,error=false){$('#studio-ai-status').textContent=message;$('#studio-ai-status').classList.toggle('ai-error',error);}
 function aiControls(){
   $('#studio-ai-generate').disabled=studioAIBusy||!studioAIConfig?.configured;
@@ -15,11 +16,12 @@ async function studioAIReset(){
   studioAIResult=null;studioAISource=null;studioAIJobSource=null;
   if(studioAIObjectURL){URL.revokeObjectURL(studioAIObjectURL);studioAIObjectURL=null;}
   $('#studio-ai-resume').classList.add('hidden');$$('.ai-stage').forEach(el=>el.classList.remove('is-done'));
-  $('#studio-ai-file').value='';$('#studio-ai-filename').textContent='支持文字型 PDF / PPTX · 最多 20MB、60 页';
+  $('#studio-ai-file').value='';$('#studio-ai-filename').textContent='正在读取文件大小限制…';
   $('#studio-ai-result').classList.add('hidden');aiStatus('正在检查 AI 服务配置…');aiControls();
   try{
     const config=await zhixingApi.request(aiURL('/api/studio/ai/config'));if(epoch!==studioAIEpoch)return;
     studioAIConfig=config;
+    $('#studio-ai-filename').textContent=aiFileHint();studioRefresh();
     $('#studio-ai-model').textContent=config.configured?`云渡 · ${config.model}`:'AI 尚未配置';
     aiStatus(config.configured?'上传你已有的资料，其余内容交给 AI 先整理。':'后端尚未配置可用的云渡接口，可使用高级编辑。',!config.configured);aiControls();
     let saved;try{saved=JSON.parse(sessionStorage.getItem(aiJobKey())||'null');}catch{}
@@ -28,25 +30,40 @@ async function studioAIReset(){
 }
 $('#studio-ai-file').onchange=()=>{
   const file=$('#studio-ai-file').files[0];
-  $('#studio-ai-filename').textContent=file?`${file.name} · ${(file.size/1024/1024).toFixed(1)} MB`:'支持文字型 PDF / PPTX · 最多 20MB、60 页';
+  $('#studio-ai-filename').textContent=file?`${file.name} · ${(file.size/1024/1024).toFixed(1)} MB`:aiFileHint();
 };
 $('#studio-ai-generate').onclick=async()=>{
   if(studioAIBusy||!studioAIConfig?.configured)return;
   const file=$('#studio-ai-file').files[0];
   if(!file||! /\.(pdf|pptx)$/i.test(file.name)){aiStatus('请上传 PDF 或 PPTX；旧版 PPT 请先另存为 PPTX。',true);return;}
-  if(!file.size||file.size>20*1024*1024){aiStatus('文件为空或超过 20MB，请拆分后上传。',true);return;}
+  if(!file.size||file.size>studioAIConfig.max_mb*1024*1024){aiStatus(`文件为空或超过 ${studioAIConfig.max_mb}MB，请压缩或拆分后上传。`,true);return;}
   const epoch=++studioAIEpoch;studioAIBusy=true;$('#studio-ai-resume').classList.add('hidden');$$('.ai-stage').forEach(el=>el.classList.remove('is-done'));aiControls();aiStatus('正在上传资料，仅用于生成草稿…');
-  const form=new FormData();form.append('file',file);form.append('audience',$('#studio-ai-audience').value);form.append('request_id',crypto.randomUUID());
+  const token=crypto.randomUUID();
+  const form=new FormData();form.append('file',file);form.append('audience',$('#studio-ai-audience').value);form.append('request_id',token);
+  studioAIJobSource=file;
+  if(studioAIConfig.request_bound){
+    studioAIJob='request-'+token;
+    try{sessionStorage.setItem(aiJobKey(),JSON.stringify({id:studioAIJob}));}catch{}
+    aiStatus('正在上传和整理资料，请保持页面打开，通常需要数分钟。');
+  }
   try{
     const response=await zhixingApi.request(aiURL('/api/studio/ai/jobs'),{method:'POST',headers:{'X-Studio-CSRF':studioAIConfig.csrf},body:form});
     if(epoch!==studioAIEpoch)return;studioAIJob=response.job_id;studioAIJobSource=file;
     try{sessionStorage.setItem(aiJobKey(),JSON.stringify({id:studioAIJob}));}catch{}
     aiPoll(epoch);
-  }catch(error){if(epoch!==studioAIEpoch)return;studioAIBusy=false;aiStatus(error.message,true);aiControls();}
+  }catch(error){
+    if(epoch!==studioAIEpoch)return;
+    if(studioAIConfig.request_bound&&(!error.status||(error.status>=500&&!error.body))){
+      aiStatus('连接中断，正在查询已提交的任务，不会重复生成…');aiPoll(epoch);return;
+    }
+    try{sessionStorage.removeItem(aiJobKey());}catch{}
+    studioAIBusy=false;aiStatus(error.message,true);aiControls();
+  }
 };
 async function aiPoll(epoch){
   try{
     const job=await zhixingApi.request(aiURL('/api/studio/ai/jobs/'+studioAIJob));if(epoch!==studioAIEpoch)return;
+    studioAIJob=job.id;
     const prefix=job.state==='error'&&job.extraction?`资料解析已完成（${job.extraction.total_pages} 页）。`:'';
     aiStatus(prefix+job.message,job.state==='error');
     const stages=['queued','parsing','generating','done'];
@@ -63,7 +80,11 @@ async function aiPoll(epoch){
 $('#studio-ai-resume').onclick=()=>{if(!studioAIJob)return;$('#studio-ai-resume').classList.add('hidden');studioAIBusy=true;aiControls();aiPoll(++studioAIEpoch);};
 $('#studio-ai-cancel').onclick=async()=>{
   if(!studioAIJob){aiStatus('正在上传，请稍候再停止等待。');return;}
-  try{await zhixingApi.request(aiURL('/api/studio/ai/jobs/'+studioAIJob),{method:'DELETE',headers:{'X-Studio-CSRF':studioAIConfig.csrf}});++studioAIEpoch;clearTimeout(studioAITimer);studioAIBusy=false;try{sessionStorage.removeItem(aiJobKey());}catch{}aiStatus('已停止等待；已发出的模型请求仍可能产生费用。');aiControls();}
+  try{
+    if(studioAIJob.startsWith('request-')){
+      const job=await zhixingApi.request(aiURL('/api/studio/ai/jobs/'+studioAIJob));studioAIJob=job.id;
+    }
+    await zhixingApi.request(aiURL('/api/studio/ai/jobs/'+studioAIJob),{method:'DELETE',headers:{'X-Studio-CSRF':studioAIConfig.csrf}});++studioAIEpoch;clearTimeout(studioAITimer);studioAIBusy=false;try{sessionStorage.removeItem(aiJobKey());}catch{}aiStatus('已停止等待；已发出的模型请求仍可能产生费用。');aiControls();}
   catch(error){aiStatus(error.message,true);}
 };
 function aiRenderResult(){

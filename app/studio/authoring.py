@@ -3,7 +3,8 @@ import json
 from secrets import token_hex
 from flask import jsonify, request, session
 from psycopg.types.json import Jsonb
-from app.infrastructure.storage import upload_folder
+from app.infrastructure.storage import save_upload, delete_upload, database_storage
+from werkzeug.exceptions import HTTPException
 
 MODES = {'resource', 'video', 'guided', 'practice', 'blended'}
 EXTENSIONS = {'pdf':'pdf','doc':'word','docx':'word','ppt':'ppt','pptx':'ppt','mp4':'video','mov':'video'}
@@ -68,7 +69,6 @@ def register_studio(app,get_db,teacher_required,managed_course,course_json):
     def edit_course(course_id):return save(course_id)
 
     def save(course_id):
-        UPLOAD_FOLDER=upload_folder()
         db=get_db();original=None
         if course_id is not None:
             original=managed_course(course_id)
@@ -97,7 +97,7 @@ def register_studio(app,get_db,teacher_required,managed_course,course_json):
                 if revision!=(current['revision'] if current else 0):
                     db.rollback();return jsonify(error='课程已被其他窗口修改，请重新打开后编辑'),409
             if extension:
-                stored=f'{token_hex(16)}.{extension}';upload.save(UPLOAD_FOLDER/stored)
+                stored=f'{token_hex(16)}.{extension}';save_upload(upload,stored)
             filename=stored or (original['filename'] if original else None)
             fields=(content['title'],content['category'],resource_type or 'text',content['description'],f"约 {content['minutes']} 分钟",filename)
             if course_id is None:
@@ -107,11 +107,19 @@ def register_studio(app,get_db,teacher_required,managed_course,course_json):
             else:db.execute('UPDATE courses SET title=%s,category=%s,resource_type=%s,description=%s,duration=%s,filename=%s WHERE id=%s',(*fields,course_id))
             db.execute('''INSERT INTO course_studio (course_id,content) VALUES (%s,%s)
                 ON CONFLICT(course_id) DO UPDATE SET content=EXCLUDED.content,revision=course_studio.revision+1''',(course_id,Jsonb(content)))
+            if database_storage() and stored and original and original['filename']:
+                delete_upload(original['filename'])
             db.commit()
+        except HTTPException:
+            db.rollback()
+            raise
         except Exception:
             db.rollback()
-            if stored:(UPLOAD_FOLDER/stored).unlink(missing_ok=True)
+            if stored and not database_storage():delete_upload(stored)
             app.logger.exception('Course publish failed')
             return jsonify(error='保存失败，请稍后重试；若数据库账号无建表权限，请联系平台负责人初始化课程配置表'),500
         course=db.execute('SELECT * FROM courses WHERE id=%s',(course_id,)).fetchone()
+        if not database_storage() and stored and original and original['filename']:
+            try:delete_upload(original['filename'])
+            except OSError:app.logger.warning('Could not remove superseded course attachment')
         return jsonify(course=course_json(course),content=read_studio(db,course_id)),201 if original is None else 200

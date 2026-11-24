@@ -8,6 +8,9 @@ def user_json(row: Mapping[str, Any]) -> dict:
     user.pop("password_hash", None)
     user.pop("session_version", None)
     user["email_verified"] = bool(user.pop("email_verified_at", None))
+    # Keep the response compatible with older clients without falsely claiming
+    # email ownership. Legacy database verification flags no longer gate access.
+    user["verification_required"] = False
     user["avatar_url"] = (
         f"/avatars/{user['avatar_filename']}" if user.get("avatar_filename") else None
     )

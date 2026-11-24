@@ -106,6 +106,50 @@ def browser_page():
         server.server_close()
 
 
+def test_hosted_ai_connection_loss_restores_result_without_duplicate_post(browser_page):
+    from test_teacher_features import fixture_result
+    page,root,_=browser_page
+    result=fixture_result()
+    result.update(extraction={'total_pages':1,'readable_pages':1,'characters':120,'warnings':[]},
+                  sources=[],source={'filename':'cloud.pptx'},model='mock')
+    posts=[];lookups=[];errors=[]
+    page.on('pageerror',lambda error:errors.append(str(error)))
+    page.route(root+'/api/**',lambda route:route.fulfill(json={'user':None,'courses':[]}))
+    page.route('**/api/studio/ai/config*',lambda route:route.fulfill(json={
+        'configured':True,'csrf':'mock','model':'mock','max_mb':3,'upload_max_mb':3,'request_bound':True}))
+    def jobs(route):
+        if route.request.method=='POST':
+            posts.append(route.request.post_data_buffer)
+            return route.fulfill(status=504,content_type='text/html',body='Gateway timeout')
+        lookups.append(route.request.url)
+        return route.fulfill(json={'id':'durable-job','state':'done','message':'Ready','result':result})
+    page.route('**/api/studio/ai/jobs**',jobs)
+    page.goto(root+'/?preview=studio')
+    page.locator('#studio-ai-file').set_input_files({'name':'cloud.pptx','mimeType':'application/octet-stream','buffer':b'small teaching material'})
+    page.locator('#studio-ai-generate').click()
+    page.locator('#studio-ai-result:not(.hidden)').wait_for()
+    assert len(posts)==1 and '/jobs/request-' in lookups[0]
+    assert page.locator('#studio-title').input_value()==''
+    page.locator('#studio-ai-apply').click()
+    assert page.locator('#studio-title').input_value()==result['course']['title']
+    assert not errors
+    assert '3MB' in page.locator('#studio-upload-limit').text_content()
+
+
+def test_hosted_ai_rejects_large_file_before_sending(browser_page):
+    page,root,_=browser_page
+    requests=[]
+    page.route(root+'/api/**',lambda route:route.fulfill(json={'user':None,'courses':[]}))
+    page.route('**/api/studio/ai/config*',lambda route:route.fulfill(json={
+        'configured':True,'csrf':'mock','model':'mock','max_mb':3,'upload_max_mb':3,'request_bound':True}))
+    page.route('**/api/studio/ai/jobs**',lambda route:(requests.append(route.request.method),route.abort()))
+    page.goto(root+'/?preview=studio')
+    page.locator('#studio-ai-file').set_input_files({'name':'large.pdf','mimeType':'application/pdf','buffer':b'x'*(3*1024*1024+1)})
+    page.locator('#studio-ai-generate').click()
+    assert '3MB' in page.locator('#studio-ai-status').text_content()
+    assert not requests
+
+
 @pytest.mark.parametrize(
     "legacy_scripts",
     [
@@ -305,7 +349,7 @@ def test_login_submit_is_locked_until_failure_and_can_retry(browser_page):
     page.wait_for_function("!document.querySelector('#auth-submit').disabled")
 
 
-@pytest.mark.parametrize('purpose', ['verify', 'reset'])
+@pytest.mark.parametrize('purpose', ['reset'])
 def test_account_links_require_confirmation_and_clear_fragment(browser_page, purpose):
     page,root,_=browser_page
     calls=[]
@@ -330,6 +374,20 @@ def test_account_links_require_confirmation_and_clear_fragment(browser_page, pur
     posts=[json.loads(body) for method,_,body in calls if method=='POST']
     assert len(posts)==1 and posts[0]['token']==token
     assert page.locator('#account-action-form button[type=submit]').is_disabled()
+
+
+def test_old_verification_link_is_retired_without_posting(browser_page):
+    page,root,_=browser_page
+    posts=[]
+    def respond(route):
+        if route.request.method=='POST': posts.append(route.request.url)
+        route.fulfill(json={'user':None,'courses':[]})
+    page.route(root+'/api/**',respond)
+    page.goto(root+'/#account-verify='+'a'*40)
+    page.locator('#toast-message').filter(has_text='注册无需邮箱验证').wait_for()
+    assert '#' not in page.url and posts==[]
+    assert page.locator('#account-action-modal').is_hidden()
+    assert page.locator('#send-verification').count()==0
 
 
 def test_recovery_unconfigured_mail_shows_actionable_error(browser_page):

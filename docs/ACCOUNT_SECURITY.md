@@ -1,11 +1,16 @@
-# Account verification, teacher review and password recovery
+# Registration, teacher review and password recovery
 
 ## Setup
 
 Install dependencies and run `python -m flask --app run migrate` before deploying this version.
 Migration `007_account_security.sql` adds account state, one-use token hashes and review history.
 Existing accounts keep their existing roles and access; they are **not** falsely marked email-verified.
-All newly registered accounts require email verification before using learning/teaching APIs.
+Registration signs the user in without sending email or requiring verification. Students can
+start learning immediately and optionally complete their learning profile. Existing unverified accounts are also usable. The legacy
+database columns are retained, but no access check uses them. Responses expose
+`verification_required: false`; `email_verified` remains a truthful historical value.
+The verification request/confirmation routes have been removed. Old verification links show
+a notice, and historical verification tokens cannot reset a password. No data reset is needed.
 New teacher signups receive the student role until an administrator approves their application.
 
 Set a stable random `ZHIXING_SECRET_KEY` on every server worker. Changing this key logs everyone out.
@@ -21,7 +26,7 @@ Open the link from the message body in the local app. This is a local test outbo
 File mode refuses non-loopback public origins. The outbox is ignored by Git and not served by Flask.
 It contains credential links: restrict directory access, do not share/upload it, and delete expired test mail.
 Default `MAIL_BACKEND=disabled` explains that delivery is unavailable instead of pretending to send email.
-Registration still creates the account; verification can be resent from the profile when configured.
+Registration and learning work with mail disabled. Only password recovery needs mail delivery.
 
 ## Real SMTP
 
@@ -33,23 +38,23 @@ must be checked when actual SMTP credentials are available. No live SMTP deliver
 
 ## User flows
 
-- Registration sends a verification email when delivery is available. The profile supports resending.
-- Email verification links expire after 24 hours. Sending a replacement invalidates the old link.
+- Registration directly signs the student in and opens learning-experience setup; no email is sent.
 - Forgot password is available on the login dialog. Reset links expire after 30 minutes.
 - Links use a URL fragment, removed from browser history by the page, and require an explicit POST confirmation.
   GET/link-preview scanners cannot consume a token. The database stores SHA-256 token hashes, not raw links.
 - Successful password changes/resets increment the account's session version and log out every previous
   session, including the current browser. The user signs in again with the new password.
-- A verified student fills in teaching purpose/institution/course details in their profile.
+- A student fills in teaching purpose/institution/course details in their profile.
   Administrators open account management, choose pending teacher applications, and approve or return each
-  with an explanation. Approval requires a verified email and a completed application.
+  with an explanation. Approval requires a completed teaching-purpose application.
   Decisions are saved in `teacher_reviews`. Applicants can resubmit after rejection.
 - Approval/rejection invalidates the applicant's old sessions; signing in again refreshes the role.
-  Email ownership alone is not evidence of teacher identity: the administrator must check the stated context.
+  Registration does not verify email ownership or teacher identity: the administrator must check the stated context.
 
 ## Boundaries and validation
 
-Existing pre-migration accounts remain usable but can verify their email in the profile.
+Existing accounts remain usable without verification. Password hashing, same-origin write checks,
+role restrictions and session revocation remain enabled. Teacher access still requires approval.
 Login and mail/credential endpoints have bounded per-process throttling. Multiple workers require a shared
 rate limiter/gateway, and the existing AI jobs require a shared queue before multi-worker deployment.
 Password-reset responses do not reveal whether an email is registered. SMTP failures are logged without

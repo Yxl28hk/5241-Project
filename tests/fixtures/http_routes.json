@@ -241,14 +241,6 @@
   ],
   [
     "POST",
-    "/api/auth/verification/request"
-  ],
-  [
-    "POST",
-    "/api/auth/verification/confirm"
-  ],
-  [
-    "POST",
     "/api/auth/password/request"
   ],
   [

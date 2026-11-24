@@ -8,7 +8,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.auth import repository
 from app.auth.serializers import user_json
-from app.infrastructure.storage import allowed_file, upload_folder
+from app.infrastructure.storage import allowed_file, save_upload, delete_upload, database_storage
 from config import AVATAR_EXTENSIONS
 
 
@@ -101,15 +101,12 @@ def delete_account(*, user_id, get_db):
     repository.delete_account_learning(db, (user_id,))
     repository.delete_owned_courses(db, (user_id,))
     repository.delete_user(db, (user_id,))
+    filenames=[row['filename'] for row in course_rows]+[user['avatar_filename']]
+    if database_storage():
+        for filename in filenames:delete_upload(filename)
     db.commit()
-    files_to_remove = [
-        upload_folder() / row["filename"] for row in course_rows if row["filename"]
-    ]
-    if user["avatar_filename"]:
-        files_to_remove.append(upload_folder() / user["avatar_filename"])
-    for stored_file in files_to_remove:
-        if stored_file.is_file():
-            stored_file.unlink()
+    if not database_storage():
+        for filename in filenames:delete_upload(filename)
     return {"message": "账号已注销"}
 
 
@@ -127,7 +124,7 @@ def update_profile(*, user_id, form, files, get_db):
         if extension not in AVATAR_EXTENSIONS:
             return ({"error": "头像仅支持 JPG、PNG、GIF 或 WEBP"}, 400)
         filename = f"{token_hex(12)}.{extension}"
-        avatar.save(upload_folder() / filename)
+        save_upload(avatar, filename)
     if filename:
         repository.update_name_and_avatar(db, (name, filename, user_id))
     else:

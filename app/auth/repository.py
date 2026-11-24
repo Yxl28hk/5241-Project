@@ -35,7 +35,7 @@ def list_learning_records(db):
 
 def insert_user(db, params):
     return db.execute(
-        "INSERT INTO users (name, email, password_hash, role, verification_required, teacher_status) VALUES (%s, %s, %s, 'student', TRUE, CASE WHEN %s='teacher' THEN 'pending' ELSE 'none' END) RETURNING id",
+        "INSERT INTO users (name, email, password_hash, role, verification_required, teacher_status) VALUES (%s, %s, %s, 'student', FALSE, CASE WHEN %s='teacher' THEN 'pending' ELSE 'none' END) RETURNING id",
         params,
     )
 

@@ -18,11 +18,15 @@ from app.learning.paths import read_profile
 from app.learning.service import course_context
 from app.learning.study import EXERCISES, focus_context
 from app.tutor import repository
+from app.tutor.materials import course_materials, published_fallback
+from app.studio.authoring import read_studio
 from app.tutor.conversations import open_conversation, public_conversation
 
 
 def tutor_reply(app, get_db, data, course, module, user_id):
     db = get_db()
+    if not module:
+        course = {**course, "studio": read_studio(db, course["id"]) or {}}
     key = data.get("context_key", "overview")
     action = data.get("action", "answer")
     if (
@@ -35,10 +39,13 @@ def tutor_reply(app, get_db, data, course, module, user_id):
     focus = focus_context(module, course, key)
     if not focus:
         return ({"error": "所选段落不存在，请重新选择"}, 400)
-    if action in {"hint", "reference"} and (
-        not module or key not in {"task", "exercise"}
+    if action in {"hint", "reference"} and not (
+        (module and key in {"task", "exercise"}) or
+        (not module and key == "task" and course["studio"].get("task"))
     ):
         return ({"error": "请先选择本节任务或练习"}, 400)
+    if action == "reference" and not module and not course["studio"].get("reference"):
+        return ({"error": "教师尚未发布本任务的参考思路"}, 400)
     if action == "hint" and (
         type(data.get("hint_step")) is not int or data["hint_step"] not in {1, 2}
     ):
@@ -87,7 +94,11 @@ def tutor_reply(app, get_db, data, course, module, user_id):
     profile = read_profile(db, user_id)
     db.commit()
     mode = "guided-demo" if data.get("mode") == "guided-demo" else tutor_mode(app)
-    if action == "hint":
+    if action == "reference" and not module:
+        answer = course["studio"]["reference"]
+        mode = "guided-demo"
+        label = "教师发布的参考思路"
+    elif action == "hint" and module:
         group = "quiz_hints" if key == "exercise" else "task_hints"
         answer = (
             f"第 {data['hint_step']} 步提示："
@@ -108,16 +119,24 @@ def tutor_reply(app, get_db, data, course, module, user_id):
     else:
         if mode == "live":
             try:
+                materials = course_materials(app, db, course, module)
+                db.commit()
                 answer = model_answer(
                     app,
                     module,
-                    {**course, "focus": focus},
-                    data["message"].strip(),
+                    {**course, "focus": focus, "materials": materials},
+                    (f"请围绕当前教师任务提供第 {data['hint_step']} 步提示，不直接给出完整答案。先引导理解任务，再引导检查完成标准。学生问题：" if action == "hint" else "") + data["message"].strip(),
                     history,
                     profile,
                 )
+                if materials["sources"]:
+                    answer += "\n\n本次参考范围：" + "、".join(s["source"] for s in materials["sources"])
+                if materials["warnings"]:
+                    answer += "\n\n资料读取说明：" + "；".join(materials["warnings"])
             except TutorUnavailable as error:
                 return ({"error": str(error), "retryable": True}, 502)
+        elif not module:
+            answer = published_fallback(course, focus, action, data.get("hint_step", 1))
         elif key == "overview":
             answer = guided_answer(module, course, data["message"].strip(), history)
         else:
@@ -133,6 +152,8 @@ def tutor_reply(app, get_db, data, course, module, user_id):
         label = (
             "AI 学习助手" if mode == "live" else "课时知识卡 · 规则式助手（非大模型）"
         )
+        if not module and mode != "live":
+            label = "课程原文备用说明 · 未调用 AI"
     result = {
         "mode": mode,
         "label": label,
