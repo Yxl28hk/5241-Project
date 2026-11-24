@@ -1,5 +1,6 @@
 /* Upload first; generated content remains a candidate until explicitly adopted. */
 let studioAIBusy=false,studioAIConfig=null,studioAIResult=null,studioAIJob=null,studioAITimer=null,studioAIEpoch=0,studioAISource=null,studioAIJobSource=null,studioAIObjectURL=null;
+let studioAICancelling=false,studioAIWaitingUpload=false,studioAIStartedAt=0,studioAIPollingEpoch=null,studioAITerminalEpoch=null;
 function aiURL(path){return path+(studioPreview?'?preview=1':'');}
 function aiJobKey(){return 'zhixing:ai-job:'+(studioPreview?'preview':state.user?.id);}
 function aiFileHint(){return `支持文字型 PDF / PPTX · 最多 ${studioAIConfig?.max_mb||3}MB、60 页`;}
@@ -8,11 +9,13 @@ function aiControls(){
   $('#studio-ai-generate').disabled=studioAIBusy||!studioAIConfig?.configured;
   $('#studio-ai-file').disabled=studioAIBusy;$('#studio-ai-audience').disabled=studioAIBusy;
   $('#studio-ai-cancel').classList.toggle('hidden',!studioAIBusy);
+  $('#studio-ai-cancel').disabled=studioAICancelling;
   $('#studio-ai-generate').textContent=studioAIBusy?'正在整理资料…':'生成课程草稿与评价';
   $('#studio-ai-apply').disabled=studioAIBusy||!studioAIResult;
 }
 async function studioAIReset(){
   const epoch=++studioAIEpoch;clearTimeout(studioAITimer);studioAIJob=null;studioAIBusy=false;studioAIConfig=null;
+  studioAICancelling=false;studioAIWaitingUpload=false;
   studioAIResult=null;studioAISource=null;studioAIJobSource=null;
   if(studioAIObjectURL){URL.revokeObjectURL(studioAIObjectURL);studioAIObjectURL=null;}
   $('#studio-ai-resume').classList.add('hidden');$$('.ai-stage').forEach(el=>el.classList.remove('is-done'));
@@ -25,7 +28,8 @@ async function studioAIReset(){
     $('#studio-ai-model').textContent=config.configured?`AI · ${config.model}`:'AI 尚未配置';
     aiStatus(config.configured?'上传你已有的资料，其余内容交给 AI 先整理。':'后端尚未配置可用的 AI 接口，可使用高级编辑。',!config.configured);aiControls();
     let saved;try{saved=JSON.parse(sessionStorage.getItem(aiJobKey())||'null');}catch{}
-    if(saved?.id){studioAIJob=saved.id;studioAIBusy=true;aiControls();aiPoll(epoch);}
+    const active=config.active_job_id||saved?.id;
+    if(active){studioAIJob=active;studioAIBusy=true;aiControls();aiPoll(epoch);}
   }catch(error){if(epoch!==studioAIEpoch)return;aiStatus(error.message,true);aiControls();}
 }
 $('#studio-ai-file').onchange=()=>{
@@ -41,41 +45,64 @@ $('#studio-ai-generate').onclick=async()=>{
   const token=crypto.randomUUID();
   const form=new FormData();form.append('file',file);form.append('audience',$('#studio-ai-audience').value);form.append('request_id',token);
   studioAIJobSource=file;
+  studioAICancelling=false;studioAIWaitingUpload=true;studioAIStartedAt=Date.now();
   if(studioAIConfig.request_bound){
     studioAIJob='request-'+token;
     try{sessionStorage.setItem(aiJobKey(),JSON.stringify({id:studioAIJob}));}catch{}
     aiStatus('正在上传和整理资料，请保持页面打开，通常需要数分钟。');
+    studioAITimer=setTimeout(()=>aiPoll(epoch),1600);
   }
   try{
     const response=await zhixingApi.request(aiURL('/api/studio/ai/jobs'),{method:'POST',headers:{'X-Studio-CSRF':studioAIConfig.csrf},body:form});
-    if(epoch!==studioAIEpoch)return;studioAIJob=response.job_id;studioAIJobSource=file;
+    if(epoch!==studioAIEpoch)return;studioAIWaitingUpload=false;
+    if(studioAITerminalEpoch===epoch)return;studioAIBusy=true;studioAIJob=response.job_id;studioAIJobSource=file;
     try{sessionStorage.setItem(aiJobKey(),JSON.stringify({id:studioAIJob}));}catch{}
     aiPoll(epoch);
   }catch(error){
     if(epoch!==studioAIEpoch)return;
+    if(studioAITerminalEpoch===epoch)return;
+    studioAIWaitingUpload=false;
+    if(error.status===409&&error.body?.job_id){
+      studioAIJob=error.body.job_id;studioAIJobSource=null;studioAIBusy=true;
+      try{sessionStorage.setItem(aiJobKey(),JSON.stringify({id:studioAIJob}));}catch{}
+      aiStatus('正在恢复上一次生成的进度，不会重复调用模型…');aiControls();aiPoll(epoch);return;
+    }
     if(studioAIConfig.request_bound&&(!error.status||(error.status>=500&&!error.body))){
       aiStatus('连接中断，正在查询已提交的任务，不会重复生成…');aiPoll(epoch);return;
     }
     try{sessionStorage.removeItem(aiJobKey());}catch{}
-    studioAIBusy=false;aiStatus(error.message,true);aiControls();
+    clearTimeout(studioAITimer);studioAIBusy=false;aiStatus(error.message,true);aiControls();
   }
 };
 async function aiPoll(epoch){
+  if(epoch!==studioAIEpoch||studioAIPollingEpoch===epoch)return;
+  studioAIPollingEpoch=epoch;clearTimeout(studioAITimer);
+  const polledId=studioAIJob;
   try{
-    const job=await zhixingApi.request(aiURL('/api/studio/ai/jobs/'+studioAIJob));if(epoch!==studioAIEpoch)return;
+    const job=await zhixingApi.request(aiURL('/api/studio/ai/jobs/'+polledId));if(epoch!==studioAIEpoch)return;
+    if(polledId!==studioAIJob){studioAITimer=setTimeout(()=>aiPoll(epoch),0);return;}
     studioAIJob=job.id;
+    try{sessionStorage.setItem(aiJobKey(),JSON.stringify({id:studioAIJob}));}catch{}
     const prefix=job.state==='error'&&job.extraction?`资料解析已完成（${job.extraction.total_pages} 页）。`:'';
     aiStatus(prefix+job.message,job.state==='error');
     const stages=['queued','parsing','generating','done'];
     const current=stages.indexOf(job.state==='error'?(job.stage||'queued'):job.state);
     $$('.ai-stage').forEach((el,i)=>{el.classList.toggle('is-done',job.state==='done'||i<current);el.classList.toggle('ai-error',job.state==='error'&&i===current);});
+    if(job.in_flight){studioAICancelling=true;studioAIBusy=true;aiControls();studioAITimer=setTimeout(()=>aiPoll(epoch),1600);return;}
+    studioAICancelling=false;
     if(job.state==='done'){
+      studioAITerminalEpoch=epoch;
       studioAIResult=job.result;studioAISource=studioAIJobSource;studioAIBusy=false;try{sessionStorage.removeItem(aiJobKey());}catch{}
       aiRenderResult();aiControls();return;
     }
-    if(['error','cancelled'].includes(job.state)){studioAIBusy=false;try{sessionStorage.removeItem(aiJobKey());}catch{}aiControls();return;}
+    if(['error','cancelled'].includes(job.state)){studioAITerminalEpoch=epoch;studioAIBusy=false;try{sessionStorage.removeItem(aiJobKey());}catch{}aiControls();return;}
     studioAITimer=setTimeout(()=>aiPoll(epoch),1600);
-  }catch(error){if(epoch!==studioAIEpoch)return;studioAIBusy=false;aiStatus('状态读取失败：'+error.message+' 可点击“恢复查询”，不会重复调用模型。',true);$('#studio-ai-resume').classList.remove('hidden');aiControls();}
+  }catch(error){
+    if(epoch!==studioAIEpoch)return;
+    if(polledId!==studioAIJob){studioAITimer=setTimeout(()=>aiPoll(epoch),0);return;}
+    if(error.status===404&&studioAIWaitingUpload&&Date.now()-studioAIStartedAt<30000){studioAITimer=setTimeout(()=>aiPoll(epoch),1600);return;}
+    studioAIBusy=false;aiStatus('状态读取失败：'+error.message+' 可点击“恢复查询”，不会重复调用模型。',true);$('#studio-ai-resume').classList.remove('hidden');aiControls();
+  }finally{if(studioAIPollingEpoch===epoch)studioAIPollingEpoch=null;}
 }
 $('#studio-ai-resume').onclick=()=>{if(!studioAIJob)return;$('#studio-ai-resume').classList.add('hidden');studioAIBusy=true;aiControls();aiPoll(++studioAIEpoch);};
 $('#studio-ai-cancel').onclick=async()=>{
@@ -84,7 +111,10 @@ $('#studio-ai-cancel').onclick=async()=>{
     if(studioAIJob.startsWith('request-')){
       const job=await zhixingApi.request(aiURL('/api/studio/ai/jobs/'+studioAIJob));studioAIJob=job.id;
     }
-    await zhixingApi.request(aiURL('/api/studio/ai/jobs/'+studioAIJob),{method:'DELETE',headers:{'X-Studio-CSRF':studioAIConfig.csrf}});++studioAIEpoch;clearTimeout(studioAITimer);studioAIBusy=false;try{sessionStorage.removeItem(aiJobKey());}catch{}aiStatus('已停止等待；已发出的模型请求仍可能产生费用。');aiControls();}
+    const response=await zhixingApi.request(aiURL('/api/studio/ai/jobs/'+studioAIJob),{method:'DELETE',headers:{'X-Studio-CSRF':studioAIConfig.csrf}});
+    const epoch=++studioAIEpoch;clearTimeout(studioAITimer);studioAIWaitingUpload=false;studioAICancelling=!!response.in_flight;studioAIBusy=studioAICancelling;
+    if(studioAICancelling){aiStatus('已取消，正在等待上一次生成结束，请稍候。');aiControls();aiPoll(epoch);return;}
+    try{sessionStorage.removeItem(aiJobKey());}catch{}aiStatus('已停止等待；已发出的模型请求仍可能产生费用。');aiControls();}
   catch(error){aiStatus(error.message,true);}
 };
 function aiRenderResult(){
