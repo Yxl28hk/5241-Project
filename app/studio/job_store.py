@@ -3,6 +3,35 @@ from uuid import uuid4
 from psycopg.types.json import Jsonb
 from app.infrastructure.database import get_db
 
+# Vercel terminates this invocation after 300s; allow 30s for clock/cleanup.
+LEASE_SECONDS = 330
+
+
+def expire(db):
+    db.execute("""UPDATE studio_ai_jobs SET
+        state=CASE WHEN cancelled THEN 'cancelled' ELSE 'error' END,
+        payload=(payload-'result') || jsonb_build_object(
+            'error_code','task_expired','message',CASE WHEN cancelled
+                THEN '已取消的任务已结束，可以重新生成。'
+                ELSE '上次生成已超时，可以重新生成；原草稿仍保留。' END),
+        updated_at=NOW()
+        WHERE state IN ('queued','parsing','generating')
+        AND (created_at < NOW() - %s * INTERVAL '1 second'
+             OR updated_at < NOW() - INTERVAL '8 minutes')""", (LEASE_SECONDS,))
+
+
+def current(owner):
+    """Recover only this teacher's still-running invocation, including draining cancellations."""
+    db=get_db()
+    if not db.execute("SELECT to_regclass('studio_ai_jobs') AS name").fetchone()['name']:
+        db.commit()
+        return None
+    expire(db)
+    row=db.execute("""SELECT id FROM studio_ai_jobs WHERE owner=%s
+        AND state IN ('queued','parsing','generating') ORDER BY created_at DESC LIMIT 1""",(owner,)).fetchone()
+    db.commit()
+    return row['id'] if row else None
+
 
 def reserve(owner, request_id):
     db = get_db()
@@ -16,10 +45,7 @@ def reserve(owner, request_id):
         updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(owner,request_id))""")
     db.execute("DELETE FROM studio_ai_jobs WHERE created_at < NOW() - INTERVAL '24 hours'")
-    db.execute("""UPDATE studio_ai_jobs SET state='error',
-        payload='{"message":"生成已超时，请检查资料后手动重试。"}'
-        WHERE state IN ('queued','parsing','generating')
-        AND updated_at < NOW() - INTERVAL '8 minutes'""")
+    expire(db)
     existing = db.execute("SELECT id FROM studio_ai_jobs WHERE owner=%s AND request_id=%s", (owner, request_id)).fetchone()
     if existing:
         db.commit()
@@ -31,8 +57,11 @@ def reserve(owner, request_id):
         COUNT(*) FILTER (WHERE owner=%s AND created_at > NOW() - INTERVAL '1 hour') AS own_recent
         FROM studio_ai_jobs""", (owner, owner)).fetchone()
     error = None
-    if counts['own_active']:
-        error = ({'error': '已有生成任务，请等待完成。'}, 409)
+    active=db.execute("""SELECT id,cancelled FROM studio_ai_jobs WHERE owner=%s
+        AND state IN ('queued','parsing','generating') ORDER BY created_at DESC LIMIT 1""",(owner,)).fetchone()
+    if active:
+        message='正在结束上次已取消的生成，请稍候。' if active['cancelled'] else '正在恢复已有生成任务。'
+        error = ({'error': message, 'job_id': active['id']}, 409)
     elif counts['active'] >= 2:
         error = ({'error': '生成服务正忙，请稍后重试。'}, 429)
     elif counts['recent'] >= 30 or counts['own_recent'] >= 6:
@@ -52,7 +81,8 @@ def update(jid, **values):
     state = values.pop('state', None)
     db.execute("""UPDATE studio_ai_jobs SET state=COALESCE(%s,state),
         payload=payload || %s, updated_at=NOW()
-        WHERE id=%s AND (NOT cancelled OR %s='cancelled')""", (state, Jsonb(values), jid, state))
+        WHERE id=%s AND state IN ('queued','parsing','generating')
+        AND (NOT cancelled OR %s='cancelled')""", (state, Jsonb(values), jid, state))
     db.commit()
 
 
@@ -66,7 +96,9 @@ def cancelled(jid):
 def get(owner, *, jid=None, request_id=None):
     db = get_db()
     if not db.execute("SELECT to_regclass('studio_ai_jobs') AS name").fetchone()['name']:
+        db.commit()
         return None
+    expire(db)
     row = db.execute("""SELECT id,state,payload,cancelled,
         updated_at < NOW() - INTERVAL '8 minutes' AS stale
         FROM studio_ai_jobs WHERE owner=%s AND (id=%s OR request_id=%s)
@@ -75,7 +107,9 @@ def get(owner, *, jid=None, request_id=None):
     if not row:
         return None
     if row['cancelled']:
-        return {'id':row['id'], 'state':'cancelled', 'message':'已停止等待；已发送的模型请求可能仍计费。'}
+        in_flight=row['state'] in {'queued','parsing','generating'}
+        return {'id':row['id'], 'state':'cancelled', 'in_flight':in_flight,
+                'message':'已取消，正在等待上一次生成结束，请稍候。' if in_flight else '已取消的任务已结束，可以重新生成。'}
     if row['stale'] and row['state'] in {'queued', 'parsing', 'generating'}:
         return {'id': row['id'], 'state': 'error', 'message': '生成已超时，请检查资料后手动重试。'}
     return {**row['payload'], 'id': row['id'], 'state': row['state']}

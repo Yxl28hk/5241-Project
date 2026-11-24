@@ -40,12 +40,18 @@ def register_studio_ai(app,get_db):
 
     @app.get('/api/studio/ai/config')
     def ai_config():
-        if not owner():return jsonify(error='请使用教师账号登录后生成课程。'),403
+        who=owner()
+        if not who:return jsonify(error='请使用教师账号登录后生成课程。'),403
         session.setdefault('studio_ai_csrf',token_urlsafe(24))
         settings=ai_settings()
+        if hosted:active_job_id=job_store.current(who)
+        else:
+            with LOCK:
+                trim()
+                active_job_id=next((j['id'] for j in JOBS.values() if j['owner']==who and j['state'] in {'queued','parsing','generating'}),None)
         return jsonify(configured=bool(settings['key'] and settings['base'].startswith('https://')),model=settings['model'],
                        csrf=session['studio_ai_csrf'],max_mb=max_mb,max_pages=60,max_characters=45000,
-                       upload_max_mb=app.config['UPLOAD_MAX_BYTES']//(1024*1024),request_bound=hosted)
+                       upload_max_mb=app.config['UPLOAD_MAX_BYTES']//(1024*1024),request_bound=hosted,active_job_id=active_job_id)
 
     @app.post('/api/studio/ai/jobs')
     def generate():
@@ -74,7 +80,8 @@ def register_studio_ai(app,get_db):
             existing=next((j for j in JOBS.values() if j['owner']==who and j['token']==token),None)
             if existing:return jsonify(job_id=existing['id']),202
             active=[j for j in JOBS.values() if j['state'] in {'queued','parsing','generating'}]
-            if any(j['owner']==who for j in active):return jsonify(error='已有生成任务，请等待完成。'),409
+            own_active=next((j for j in active if j['owner']==who),None)
+            if own_active:return jsonify(error='正在恢复已有生成任务。',job_id=own_active['id']),409
             if len(active)>=2:return jsonify(error='生成服务正忙，请稍后重试。'),429
             if len(RATE)>=30 or sum(x[0]==who for x in RATE)>=6:return jsonify(error='本小时生成次数已达限制，请稍后再试。'),429
             if len(JOBS)>=60:return jsonify(error='服务暂存任务已满，请稍后重试。'),429
@@ -130,6 +137,10 @@ def register_studio_ai(app,get_db):
         with LOCK:
             trim();job=JOBS.get(jid)
             if not job or job['owner']!=who:return jsonify(error='任务不存在、已过期或服务已重启，请保留原资料重新生成。'),404
+            if job['cancel']:
+                in_flight=job['state'] in {'queued','parsing','generating'}
+                return jsonify(id=jid,state='cancelled',in_flight=in_flight,
+                    message='已取消，正在等待上一次生成结束，请稍候。' if in_flight else '已取消的任务已结束，可以重新生成。')
             return jsonify({k:job[k] for k in ['id','state','message','result','stage','extraction','error_code'] if k in job})
 
     @app.delete('/api/studio/ai/jobs/<jid>')
@@ -138,10 +149,11 @@ def register_studio_ai(app,get_db):
         if not who or not csrf_ok():return jsonify(error='没有访问权限。'),403
         if hosted:
             if not job_store.cancel(who,jid):return jsonify(error='任务不存在。'),404
-            return jsonify(message='停止等待；已发出的模型请求可能仍计费。')
+            return jsonify(job_store.get(who,jid=jid))
         with LOCK:
             job=JOBS.get(jid)
             if not job or job['owner']!=who:return jsonify(error='任务不存在。'),404
             job['cancel']=True
             if job['state'] in {'done','error'}:job['state']='cancelled';job.pop('result',None)
-        return jsonify(message='停止等待；已发出的模型请求可能仍计费。')
+            in_flight=job['state'] in {'queued','parsing','generating'}
+        return jsonify(in_flight=in_flight,message='停止等待；已发出的模型请求可能仍计费。')

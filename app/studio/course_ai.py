@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import unicodedata
 import logging
 import socket
 import ssl
@@ -98,26 +99,47 @@ for number in range(1,4):
 COURSE_TOOL={'name':'submit_course','description':'用独立文本字段提交课程草稿和审阅；不要嵌套对象或 JSON 字符串。不会发布课程。',
              'input_schema':object_schema(FLAT_FIELDS)}
 
+def page_refs(item,required=False):
+    """Normalize explicit page lists/ranges, without inventing missing citations."""
+    invalid=lambda:CourseAIError('AI 返回的来源页码格式无效。')
+    if isinstance(item,str):
+        item=unicodedata.normalize('NFKC',item).strip()
+        if not required and item.lower() in {'','none','n/a','无','不适用'}:return []
+        if len(item)>200:raise invalid()
+        if item.startswith('['):
+            try:item=json.loads(item)
+            except ValueError:raise invalid() from None
+        else:
+            refs=[]
+            for part in re.split('[,，、;；]',item):
+                part=re.sub(r'^(?:pages?\.?|pp?\.?|第)\s*','',part.strip(),flags=re.I)
+                part=re.sub(r'\s*页$','',part).strip()
+                match=re.fullmatch(r'(\d{1,2})(?:\s*[-–—~至]\s*(\d{1,2}))?',part)
+                if not match:raise invalid()
+                first=int(match[1]);last=int(match[2] or first)
+                if not 1<=first<=last<=60:raise invalid()
+                refs.extend(range(first,last+1))
+            item=refs
+    if not isinstance(item,list) or len(item)>60 or (required and not item) or any(type(p) is not int or not 1<=p<=60 for p in item):raise invalid()
+    return sorted(set(item))
+
 def expand_fields(fields):
     def value(key):
         item=fields.get(key,'')
         if not isinstance(item,str):raise CourseAIError('AI 返回了不支持的字段类型，未采用此草稿。')
         return item.strip()
     def pages(key,required=False):
-        item=value(key)
-        if not item and not required:return []
-        if not re.fullmatch(r'\d+(?:\s*[,，、]\s*\d+)*',item):raise CourseAIError('AI 返回的来源页码格式无效。')
-        return [int(p.strip()) for p in re.split('[,，、]',item)]
+        return page_refs(fields.get(key,''),required)
     course={key:value(key) for key in COURSE_FIELDS+['category','level']}
     course.update(mode='guided',minutes=fields.get('minutes'),sections=[])
     for i in range(1,5):
         prefix=f'section_{i}_'
-        if not any(value(prefix+k) for k in ['title','body','pages','quote']):continue
+        if not any(fields.get(prefix+k) for k in ['title','body','pages','quote']):continue
         course['sections'].append({'title':value(prefix+'title'),'body':value(prefix+'body'),'source_pages':pages(prefix+'pages',True),'source_quote':value(prefix+'quote')})
     issues=[]
     for i in range(1,4):
         prefix=f'issue_{i}_'
-        if not any(value(prefix+k) for k in ['title','detail','pages']):continue
+        if not any(fields.get(prefix+k) for k in ['title','detail','pages']):continue
         issues.append({'title':value(prefix+'title'),'detail':value(prefix+'detail'),'source_pages':pages(prefix+'pages')})
     return {'course':course,'review':{'summary':value('summary'),'strengths':[s.strip() for s in value('strengths').splitlines() if s.strip()],'issues':issues},
             'supplements':[s.strip() for s in value('supplements').splitlines() if s.strip()]}
