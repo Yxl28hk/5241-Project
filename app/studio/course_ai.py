@@ -125,7 +125,7 @@ def expand_fields(fields):
 def response_data(result):
     if not isinstance(result,dict) or not isinstance(result.get('content'),list):
         raise CourseAIError('AI 服务返回了不支持的响应格式。')
-    if result.get('stop_reason')=='max_tokens':raise CourseAIError('模型输出未完成，请拆分资料后重试；未采用不完整课程。')
+    if result.get('stop_reason')=='max_tokens':raise CourseAIError('模型输出达到长度上限，课程尚未生成完整。请减少本次资料范围后重试；原草稿仍保留。','output_limit')
     blocks=result['content']
     calls=[block for block in blocks if isinstance(block,dict) and block.get('type')=='tool_use']
     if calls:
@@ -150,6 +150,10 @@ def request_course(extracted,audience,on_progress=None):
     payload={'model':settings['model'],'max_tokens':4500,'stream':True,'system':SYSTEM,
              'tools':[COURSE_TOOL],'tool_choice':{'type':'tool','name':'submit_course'},
              'messages':[{'role':'user','content':json.dumps({'audience':audience,'source_pages':extracted['pages'],'extraction_warnings':extracted['warnings']},ensure_ascii=False)}]}
+    if parsed.hostname=='openrouter.ai':
+        # This is bounded source extraction into a fixed course form. OpenRouter
+        # maps this flag to reasoning.enabled=false, preserving the output budget.
+        payload['thinking']={'type':'disabled'}
     req=Request(url,data=json.dumps(payload).encode('utf-8'),headers={'Content-Type':'application/json',
                 'Authorization':'Bearer '+settings['key'],'anthropic-version':'2023-06-01'},method='POST')
     started=monotonic()
@@ -180,13 +184,15 @@ def request_course(extracted,audience,on_progress=None):
         messages={'incomplete_response':'AI 服务在返回完整结果前结束了连接，未采用残缺草稿。',
                   'timeout':'本次生成超过等待时限，请稍后再试或减少资料范围。',
                   'provider_stream_error':'AI 服务在生成过程中报告服务错误，请稍后再试。',
+                  'output_limit':'模型输出达到长度上限，课程尚未生成完整。请减少本次资料范围后重试。',
+                  'invalid_tool_json':'AI 未按课程模板返回完整内容，请重新生成或使用手动编辑。',
                   'response_too_large':'AI 返回内容过大，请拆分资料。'}
         raise failure(error.code,messages.get(error.code,'AI 服务返回的内容格式异常。'),error) from None
     except (ValueError,UnicodeError,KeyError,TypeError,AttributeError) as error:
         raise failure('invalid_response','AI 服务返回的响应格式异常，未采用此结果。',error) from None
     data=response_data(result)
     validated=validate_result(data,extracted)
-    usage=result.get('usage',{})
+    usage=result.get('usage') or {}
     validated['usage']={k:v for k,v in usage.items() if k in {'input_tokens','output_tokens'} and isinstance(v,int)}
     validated['model']=settings['model']
     return validated
