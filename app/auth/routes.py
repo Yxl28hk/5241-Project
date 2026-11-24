@@ -35,14 +35,7 @@ def register():
         session.clear()
         session["user_id"] = body["user"]["id"]
         session["session_version"] = body.pop("_session_version", 0)
-        from app.auth.lifecycle import issue
-        from app.auth.mail import MailUnavailable
-        try:
-            issue(get_db(), body["user"], "verify")
-            body["message"] = "注册成功，请检查验证邮件；本地测试模式请查看本机收件目录。"
-        except MailUnavailable:
-            get_db().rollback()
-            body["message"] = "账号已创建，但邮件服务暂不可用。请联系管理员配置后，在个人资料中重新发送验证邮件。"
+        body["message"] = "注册成功；教师身份需提交申请并由管理员审核。" if body["user"].get("teacher_status") == "pending" else "注册成功，可以开始学习。"
     return result
 
 

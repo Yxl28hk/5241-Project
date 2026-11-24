@@ -40,7 +40,10 @@ def test_account_lifecycle_with_local_mail_and_two_devices(account_app):
     uid=response.json['user']['id']
     assert response.json['user']['role']=='student' and not response.json['user']['can_upload']
     assert '_session_version' not in response.json and 'session_version' not in response.json['user']
-    assert a.get('/api/learning-path').status_code==403
+    assert not response.json['user']['verification_required']
+    assert not response.json['user']['email_verified']
+    assert not list(app.config['MAIL_OUTBOX'].glob('*.json'))
+    assert a.get('/api/learning-path').status_code==200
     assert a.post('/api/studio/courses').status_code==403
     assert a.post('/api/admin/teacher-applications/1/review',json={'decision':'approve','reason':'self approval'}).status_code==403
     assert admin.post('/api/auth/login',json={'email':'admin@example.test','password':'admin-password123'}).status_code==200
@@ -49,16 +52,8 @@ def test_account_lifecycle_with_local_mail_and_two_devices(account_app):
         files=list(app.config['MAIL_OUTBOX'].glob('*.json'))
         messages=[json.loads(p.read_text(encoding='utf-8')) for p in sorted(files,key=lambda p:p.stat().st_mtime_ns)]
         return re.search(r'#account-'+purpose+r'=([A-Za-z0-9_-]+)',messages[-1]['body'])[1]
-    assert a.post('/api/auth/verification/request').status_code==200
-    first=mail_token('verify')
-    assert a.post('/api/auth/verification/request').status_code==200
-    token=mail_token('verify')
-    assert a.post('/api/auth/verification/confirm',json={'token':first}).status_code==400
-    assert a.get('/api/auth/verification/confirm').status_code==405
-    assert a.post('/api/auth/password/reset',json={'token':token,'password':'another-pass123'}).status_code==400
-    assert a.post('/api/auth/verification/confirm',json={'token':token}).status_code==200
-    assert a.post('/api/auth/verification/confirm',json={'token':token}).status_code==400
-    assert a.get('/api/auth/me').json['user']['email_verified']
+    assert a.post('/api/auth/verification/request').status_code==404
+    assert a.post('/api/auth/verification/confirm',json={'token':'v'*40}).status_code==404
     assert a.get('/api/learning-path').status_code==200
     assert a.post('/api/profile/teacher-application',json={'reason':'Teaching software engineering to our class.'}).status_code==200
     queue=admin.get('/api/admin/teacher-applications').json['applications'];assert queue[0]['id']==uid
@@ -71,6 +66,11 @@ def test_account_lifecycle_with_local_mail_and_two_devices(account_app):
     assert a.get('/api/studio/ai/config').status_code==403
     a.post('/api/auth/login',json={'email':email,'password':password})
     assert a.get('/api/auth/me').json['user']['can_upload']
+    # An old unverified flag must not block an approved teacher's real AI routes.
+    with app.app_context():
+        db=get_db();db.execute('UPDATE users SET verification_required=TRUE WHERE id=%s',(uid,));db.commit()
+    assert a.get('/api/studio/ai/config').status_code==200
+    assert not a.get('/api/auth/me').json['user']['email_verified']
     assert a.get('/api/profile/courses').status_code==200
     b.post('/api/auth/login',json={'email':email,'password':password})
     assert a.patch('/api/profile/password',json={'current_password':password,'new_password':'changed-password123'}).status_code==200
@@ -82,6 +82,7 @@ def test_account_lifecycle_with_local_mail_and_two_devices(account_app):
     b.post('/api/auth/login',json={'email':email,'password':'changed-password123'})
     known=a.post('/api/auth/password/request',json={'email':email})
     reset=mail_token('reset')
+    assert a.get('/api/auth/password/reset').status_code==405
     unknown=a.post('/api/auth/password/request',json={'email':'unknown@example.test'})
     assert known.json==unknown.json and known.status_code==unknown.status_code==200
     from hashlib import sha256
@@ -99,6 +100,31 @@ def test_account_lifecycle_with_local_mail_and_two_devices(account_app):
         assert get_db().execute('SELECT count(*) AS n FROM teacher_reviews').fetchone()['n']==2
     app.config['MAIL_BACKEND']='disabled'
     assert a.post('/api/auth/password/request',json={'email':email}).status_code==503
+
+
+def test_registration_does_not_depend_on_mail_or_claim_verified_email(account_app,monkeypatch):
+    app=account_app
+    app.config['MAIL_BACKEND']='disabled'
+    from app.auth import mail
+    def unexpected(*args,**kwargs):
+        pytest.fail('Registration must not attempt to send mail')
+    monkeypatch.setattr(mail,'check_delivery',unexpected)
+    client=app.test_client()
+    reply=client.post('/api/auth/register',json={'name':'Student','email':'fresh@example.test','password':'password123'})
+    assert reply.status_code==201 and reply.json['user']['verification_required'] is False
+    assert reply.json['user']['email_verified'] is False
+    path=client.get('/api/learning-path')
+    assert path.status_code==200 and path.json['profile']['level']==''
+    course_id=path.json['modules'][0]['id']
+    assert client.post(f'/api/courses/{course_id}/learn').status_code==200
+    assert client.post('/api/quiz/runs',json={'mode':'quick'}).status_code==201
+    assert client.get('/game').status_code==200
+    assert client.patch('/api/learning-profile',json={'level':'beginner'}).status_code==200
+    assert client.patch('/api/learning-profile',json={'level':''}).status_code==200
+    with app.app_context():
+        row=get_db().execute('SELECT verification_required,email_verified_at FROM users WHERE id=%s',(reply.json['user']['id'],)).fetchone()
+        assert row['verification_required'] is False and row['email_verified_at'] is None
+        assert get_db().execute('SELECT count(*) AS n FROM account_tokens').fetchone()['n']==0
 
 
 def test_disabled_mail_is_explicit_without_database_access():

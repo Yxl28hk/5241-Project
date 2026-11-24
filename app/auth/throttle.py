@@ -11,7 +11,7 @@ def install_login_throttle(app):
 
     @app.before_request
     def throttle_login():
-        if request.method != "POST" or request.path not in {"/api/auth/login", "/api/auth/register", "/api/auth/password/request", "/api/auth/password/reset", "/api/auth/verification/request", "/api/auth/verification/confirm"}:
+        if request.method != "POST" or request.path not in {"/api/auth/login", "/api/auth/register", "/api/auth/password/request", "/api/auth/password/reset"}:
             return None
         data = request.get_json(silent=True)
         email = data.get("email", "") if isinstance(data, dict) else ""

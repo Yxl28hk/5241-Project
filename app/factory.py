@@ -21,18 +21,25 @@ def create_app(settings=None):
         ADMIN_EMAIL=config.ADMIN_EMAIL,
         ADMIN_PASSWORD=config.ADMIN_PASSWORD,
         UPLOAD_FOLDER=config.UPLOAD_FOLDER,
+        HOSTED_RUNTIME=config.HOSTED_RUNTIME,
+        UPLOAD_STORAGE=config.UPLOAD_STORAGE,
+        UPLOAD_MAX_BYTES=config.UPLOAD_MAX_BYTES,
         MAX_CONTENT_LENGTH=config.MAX_FILE_SIZE,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         TUTOR_API_URL=config.TUTOR_API_URL,
         TUTOR_API_KEY=config.TUTOR_API_KEY,
         TUTOR_MODEL=config.TUTOR_MODEL,
+        TUTOR_USE_STUDIO_AI=config.TUTOR_USE_STUDIO_AI,
     )
     for name in ("PUBLIC_BASE_URL", "MAIL_BACKEND", "MAIL_HOST", "MAIL_PORT", "MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_FROM", "MAIL_SECURITY"):
         app.config[name] = getattr(config, name)
     app.config["MAIL_OUTBOX"] = config.BASE_DIR / "instance" / "mail-outbox"
     if settings:
         app.config.update(settings)
+    if app.config["HOSTED_RUNTIME"] or app.config["UPLOAD_STORAGE"] == "database":
+        app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024
+        app.config["UPLOAD_MAX_BYTES"] = min(app.config["UPLOAD_MAX_BYTES"], 3 * 1024 * 1024)
     app.config["SESSION_COOKIE_SECURE"] = app.config.get("PUBLIC_BASE_URL", "").startswith("https://")
     app.teardown_appcontext(close_db)
 
@@ -73,7 +80,8 @@ def create_app(settings=None):
 
     @app.errorhandler(413)
     def file_too_large(_error):
-        return {"error": "文件不能超过 500MB"}, 413
+        limit = app.config["UPLOAD_MAX_BYTES"] // (1024 * 1024)
+        return {"error": f"文件过大，本环境单个附件最多 {limit}MB，请压缩或拆分后上传。"}, 413
 
     @app.cli.command("migrate")
     def migrate_command():

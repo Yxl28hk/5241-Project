@@ -29,7 +29,7 @@ function updateUserUI() {
     $("#profile-avatar").textContent = "";
   }
   if (typeof renderAccountSecurity === "function") renderAccountSecurity();
-  if (typeof refreshPath === "function" && !(user?.verification_required && !user?.email_verified)) refreshPath();
+  if (typeof refreshPath === "function") refreshPath();
 }
 function requireLogin(action) {
   if (!state.user) { openModal("#auth-modal"); showToast(`请先登录后再${action}`); return false; }
@@ -71,7 +71,7 @@ $("#auth-form").addEventListener("submit", async (event) => {
   const payload = { name: $("#auth-name").value.trim(), email: $("#auth-email").value.trim(), password: $("#auth-password").value, role: $("#auth-role").value };
   try {
     const result = await zhixingApi[mode === "login" ? "login" : "register"](payload);
-    state.user = result.user; updateUserUI(); closeModals(); showToast(result.message || (mode === "login" ? "登录成功，欢迎回来" : "注册成功，请先验证邮箱")); event.target.reset();
+    state.user = result.user; updateUserUI(); closeModals(); showToast(result.message || (mode === "login" ? "登录成功，欢迎回来" : "注册成功，可以开始学习")); event.target.reset();
   } catch (error) { showError("#auth-error", error); }
   finally { authSubmitting = false; $("#auth-submit").disabled = false; $$(".auth-tab").forEach(tab => tab.disabled = false); }
 });

@@ -1,4 +1,4 @@
-"""Session-scoped async AI generation. No automatic publish or database writes."""
+"""Owner-scoped AI drafts; hosted work finishes within its invocation."""
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 import hmac
@@ -10,10 +10,13 @@ from urllib.parse import urlparse
 from uuid import uuid4
 from flask import jsonify, request, session
 from app.studio.course_ai import ai_settings, parse_file, request_course, CourseAIError
+from app.studio import job_store
 
 
 def register_studio_ai(app,get_db):
     JOBS={};RATE=[];LOCK=Lock();EXECUTOR=ThreadPoolExecutor(max_workers=2)
+    hosted=app.config.get('HOSTED_RUNTIME',False)
+    max_mb=min(20,app.config['UPLOAD_MAX_BYTES']//(1024*1024))
     def owner():
         if request.args.get('preview')=='1':
             local=(request.remote_addr in {'127.0.0.1','::1'} and request.host.split(':')[0] in {'127.0.0.1','localhost'})
@@ -22,8 +25,8 @@ def register_studio_ai(app,get_db):
                 return 'local:'+session['studio_preview_id']
             return None
         if not session.get('user_id'):return None
-        user=get_db().execute('SELECT role, session_version, verification_required, email_verified_at FROM users WHERE id=%s',(session['user_id'],)).fetchone()
-        return 'user:'+str(session['user_id']) if user and user['role'] in {'teacher','admin'} and user['session_version']==session.get('session_version',0) and (not user['verification_required'] or user['email_verified_at']) else None
+        user=get_db().execute('SELECT role, session_version FROM users WHERE id=%s',(session['user_id'],)).fetchone()
+        return 'user:'+str(session['user_id']) if user and user['role'] in {'teacher','admin'} and user['session_version']==session.get('session_version',0) else None
 
     def csrf_ok():
         origin=request.headers.get('Origin')
@@ -41,14 +44,15 @@ def register_studio_ai(app,get_db):
         session.setdefault('studio_ai_csrf',token_urlsafe(24))
         settings=ai_settings()
         return jsonify(configured=bool(settings['key'] and settings['base'].startswith('https://')),model=settings['model'],
-                       csrf=session['studio_ai_csrf'],max_mb=20,max_pages=60,max_characters=45000)
+                       csrf=session['studio_ai_csrf'],max_mb=max_mb,max_pages=60,max_characters=45000,
+                       upload_max_mb=app.config['UPLOAD_MAX_BYTES']//(1024*1024),request_bound=hosted)
 
     @app.post('/api/studio/ai/jobs')
     def generate():
         who=owner()
         if not who:return jsonify(error='请使用教师账号登录后生成课程。'),403
         if not csrf_ok():return jsonify(error='页面验证已失效，请重新打开编辑器。'),403
-        if request.content_length and request.content_length>21*1024*1024:return jsonify(error='自动整理最多支持 20MB 文件。'),413
+        if request.content_length and request.content_length>(max_mb+1)*1024*1024:return jsonify(error=f'自动整理最多支持 {max_mb}MB 文件。'),413
         settings=ai_settings()
         if not settings['key'] or not settings['base'].startswith('https://'):return jsonify(error='教师端 AI 未配置。'),503
         audience=request.form.get('audience','auto')
@@ -57,8 +61,14 @@ def register_studio_ai(app,get_db):
         if not 10<=len(token)<=100:return jsonify(error='请求标识无效，请刷新页面。'),400
         file=request.files.get('file');extension=file.filename.rsplit('.',1)[-1].lower() if file and file.filename else ''
         if extension not in {'pdf','pptx'}:return jsonify(error='请上传 PDF 或 PPTX；旧版 PPT 请先另存为 PPTX。'),400
-        blob=file.read(20*1024*1024+1)
-        if not blob or len(blob)>20*1024*1024:return jsonify(error='文件为空或超过 20MB。'),400
+        blob=file.read(max_mb*1024*1024+1)
+        if not blob:return jsonify(error='文件为空，请重新选择资料。'),400
+        if len(blob)>max_mb*1024*1024:return jsonify(error=f'文件超过 {max_mb}MB，请压缩或拆分后上传。'),413
+        if hosted:
+            jid,fresh,error=job_store.reserve(who,token)
+            if error:return error
+            if fresh:work(jid,blob,extension,audience,file.filename[:160])
+            return jsonify(job_id=jid),202
         with LOCK:
             trim()
             existing=next((j for j in JOBS.values() if j['owner']==who and j['token']==token),None)
@@ -76,8 +86,10 @@ def register_studio_ai(app,get_db):
 
     def work(jid,blob,extension,audience,filename):
         def update(**values):
+            if hosted:return job_store.update(jid,**values)
             with LOCK:JOBS[jid].update(values)
         def cancelled():
+            if hosted:return job_store.cancelled(jid)
             with LOCK:return JOBS[jid]['cancel']
         try:
             if cancelled():update(state='cancelled',message='已取消。');return
@@ -102,12 +114,19 @@ def register_studio_ai(app,get_db):
         except CourseAIError as error:
             app.logger.warning('Studio AI job=%s error_code=%s',jid,error.code)
             update(state='error',error_code=error.code,message=str(error))
-        except Exception:update(state='error',message='生成过程中出现错误，未覆盖已有课程。请重试或使用高级编辑。')
+        except Exception:
+            if hosted:get_db().rollback()
+            app.logger.exception('Studio AI job failed job=%s',jid)
+            update(state='error',message='生成过程中出现错误，未覆盖已有课程。请重试或使用高级编辑。')
 
     @app.get('/api/studio/ai/jobs/<jid>')
     def status(jid):
         who=owner()
         if not who:return jsonify(error='没有访问权限。'),403
+        if hosted:
+            job=job_store.get(who,jid=jid if not jid.startswith('request-') else None,
+                              request_id=jid[8:] if jid.startswith('request-') else None)
+            return jsonify(job) if job else (jsonify(error='任务不存在或已过期，请保留原资料。'),404)
         with LOCK:
             trim();job=JOBS.get(jid)
             if not job or job['owner']!=who:return jsonify(error='任务不存在、已过期或服务已重启，请保留原资料重新生成。'),404
@@ -117,6 +136,9 @@ def register_studio_ai(app,get_db):
     def cancel(jid):
         who=owner()
         if not who or not csrf_ok():return jsonify(error='没有访问权限。'),403
+        if hosted:
+            if not job_store.cancel(who,jid):return jsonify(error='任务不存在。'),404
+            return jsonify(message='停止等待；已发出的模型请求可能仍计费。')
         with LOCK:
             job=JOBS.get(jid)
             if not job or job['owner']!=who:return jsonify(error='任务不存在。'),404

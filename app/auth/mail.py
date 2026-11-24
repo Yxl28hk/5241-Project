@@ -26,12 +26,14 @@ def check_delivery():
 
 
 def send_account_mail(email, purpose, token):
+    if purpose != 'reset':
+        raise ValueError('Only password-reset emails are supported')
     check_delivery()
     cfg = current_app.config
     # Fragment keeps the credential out of HTTP requests, referrers and access logs.
     link = cfg['PUBLIC_BASE_URL'] + '/#account-' + purpose + '=' + token
-    title = '验证知行邮箱' if purpose == 'verify' else '重置知行密码'
-    minutes = 1440 if purpose == 'verify' else 30
+    title = '重置知行密码'
+    minutes = 30
     body = f'{title}：请打开以下链接并在页面确认。链接 {minutes} 分钟内有效，只能使用一次。\n{link}\n如果不是你本人申请，请忽略本邮件。'
     if cfg['MAIL_BACKEND'] == 'file':
         outbox = Path(cfg['MAIL_OUTBOX'])

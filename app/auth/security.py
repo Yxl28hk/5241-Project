@@ -17,8 +17,6 @@ def login_required(view):
         if not user or user.get("session_version", 0) != session.get("session_version", 0):
             session.clear()
             return {"error": "登录已失效，请重新登录"}, 401
-        if user.get("verification_required") and not user.get("email_verified_at") and request.path not in {"/api/auth/verification/request", "/api/profile", "/api/profile/password"}:
-            return {"error": "请先验证邮箱，再使用学习和教学功能", "code": "email_unverified"}, 403
         return view(*args, **kwargs)
 
     return wrapped

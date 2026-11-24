@@ -4,7 +4,7 @@
 
 ## 合作者 API 函数入口
 
-教师端新增资料上传后 AI 整理、课程编辑与学生视角预览，以及课程学习进度统计和个人学习详情。配置、权限、运行限制与验证方法见 [教师端功能说明](docs/TEACHER_STUDIO.md)。AI 初稿需教师核对并主动发布；配置与学生端 Tutor 相互独立。
+教师端支持资料上传后 AI 整理、课程编辑与学生视角预览，以及课程学习进度统计和个人学习详情。配置、权限、运行限制与验证方法见 [教师端功能说明](docs/TEACHER_STUDIO.md)。AI 初稿需教师核对并主动发布；学生端可保留独立接口，或通过 `TUTOR_USE_STUDIO_AI=1` 复用教师端配置并读取已发布课件。
 
 现有 API 已统一封装到独立的 [`frontend/api/client.js`](frontend/api/client.js)，页面加载后可直接通过 `zhixingApi` 调用账号、课程、学习路径、笔记、练习、Tutor 和任务函数，无需自己拼接 URL 或处理 JSON / FormData。该模块不依赖页面 DOM，无需 npm 安装；`frontend/features/` 下的业务脚本使用同一套函数。
 
@@ -50,11 +50,15 @@ Flask CLI / WSGI 启动前先初始化：
 
 ### Vercel 部署
 
-仓库中的 `vercel.json` 已将 `run.py` 显式配置为 Flask WSGI 入口，避免 Vercel 在
-`app/__init__.py` 和 `run.py` 之间无法选择入口。部署前请在 Vercel 项目环境变量中配置
+仓库中的 `vercel.json` 使用 `api/index.py` 作为 Flask WSGI 入口，所有路径仍由 Flask 的公开资源列表控制。
+部署前请在 Vercel 项目环境变量中配置
 `DATABASE_URL` 和 `ZHIXING_SECRET_KEY`；需要管理员时再配置
 `ZHIXING_ADMIN_EMAIL` 和 `ZHIXING_ADMIN_PASSWORD`。数据库迁移和初始化应在部署前单独执行，
 不要放在模块导入阶段。
+
+线上修复的部署步骤见 **[Vercel 升级说明](docs/VERCEL_UPGRADE.md)**。注册不再要求邮件验证，教师身份仍需管理员审核。
+Vercel 上新课件保存到 PostgreSQL，单文件最多 3MB；旧部署中已经丢失的文件需要教师重新上传。
+仅合并 GitHub 不会配置云端 AI 密钥，也不会改变旧部署快照网址；请使用成功部署后的生产域名。
 
 | 环境变量 | 用途 |
 | --- | --- |
@@ -220,4 +224,4 @@ Windows 默认使用已安装的 Edge。其他系统默认使用 Playwright Chro
 
 ## 账号安全与教师审核
 
-邮箱验证、找回密码、教师申请/管理员审核和改密后的全设备会话失效已实现。部署前运行数据库迁移并配置发信服务；无 SMTP 时可使用本机测试收件箱。详见 [账号安全配置与测试](docs/ACCOUNT_SECURITY.md)。
+注册不再需要邮件认证，学生注册后可以直接开始学习，并可自愿完善学习画像。教师申请仍需管理员审核，找回密码和改密后的全设备会话失效继续保留。只有邮件找回密码需要配置发信服务；无 SMTP 时可使用本机测试收件箱。详见 [账号安全配置与测试](docs/ACCOUNT_SECURITY.md)。

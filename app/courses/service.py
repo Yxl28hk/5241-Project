@@ -3,10 +3,8 @@
 from secrets import token_hex
 from typing import Any, Mapping
 
-from werkzeug.utils import secure_filename
-
 from app.courses import repository
-from app.infrastructure.storage import allowed_file, upload_folder
+from app.infrastructure.storage import allowed_file, save_upload, delete_upload, database_storage
 
 
 def course_json(db, row: Mapping[str, Any]) -> dict:
@@ -46,9 +44,10 @@ def create_course(*, user_id, form, files, get_db):
     if resource_type not in {"pdf", "word", "ppt", "video"}:
         return ({"error": "不支持的资源类型"}, 400)
     user = repository.find_author(get_db(), (user_id,))
-    safe_name = secure_filename(file.filename)
-    stored_name = f"{token_hex(12)}_{safe_name}"
-    file.save(upload_folder() / stored_name)
+    # Preserve the extension even when the original basename is entirely Chinese.
+    extension = file.filename.rsplit('.', 1)[-1].lower()
+    stored_name = f"{token_hex(12)}.{extension}"
+    save_upload(file, stored_name)
     cover = {"pdf": "business", "video": "tech", "ppt": "humanities", "word": "design"}[
         resource_type
     ]
@@ -115,11 +114,9 @@ def delete_course(course_id: int, *, user_id, get_db):
         repository.delete_course(db, (course_id,))
     else:
         repository.delete_owned_course(db, (course_id, user_id))
+    if database_storage():delete_upload(course["filename"])
     db.commit()
-    if course["filename"]:
-        stored_file = upload_folder() / course["filename"]
-        if stored_file.is_file():
-            stored_file.unlink()
+    if not database_storage():delete_upload(course["filename"])
     return {"message": "课程已删除"}
 
 

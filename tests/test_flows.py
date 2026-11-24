@@ -30,7 +30,11 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(platform.psycopg, "connect", isolated_connect)
     monkeypatch.setattr(platform, "ADMIN_PASSWORD", "test-admin-password")
     monkeypatch.setattr(platform, "UPLOAD_FOLDER", tmp_path)
-    platform.app.config.update(TESTING=True, SECRET_KEY="test-only-session-key")
+    # A fresh app isolates per-process auth limits between independent cases.
+    # Keep throttling enabled: its behavior has dedicated regression coverage.
+    monkeypatch.setattr(platform, "app", platform.create_app({
+        "TESTING": True, "SECRET_KEY": "test-only-session-key"
+    }))
     for key in ("TUTOR_API_URL", "TUTOR_API_KEY", "TUTOR_MODEL"):
         monkeypatch.setitem(platform.app.config, key, "")
     # Each case owns a random schema; cleanup never targets public or application tables.
@@ -49,11 +53,11 @@ def client(tmp_path, monkeypatch):
 def register(client, email="student@example.test", role="student"):
     response = client.post("/api/auth/register", json={"name":"Test Learner", "email":email, "password":"password123", "role":role})
     if response.status_code == 201:
-        # These tests cover learning/course flows; verification and approval are
-        # explicitly provisioned here, and tested end-to-end in test_account_lifecycle.
+        # These cases provision the role; real teacher approval is covered
+        # end-to-end in test_account_lifecycle. Registration no longer verifies email.
         with platform.app.app_context():
             db = platform.get_db()
-            db.execute("UPDATE users SET email_verified_at=CURRENT_TIMESTAMP,role=%s,teacher_status=%s WHERE email=%s", (role, "approved" if role=="teacher" else "none", email))
+            db.execute("UPDATE users SET role=%s,teacher_status=%s WHERE email=%s", (role, "approved" if role=="teacher" else "none", email))
             db.commit()
     return response
 
@@ -380,7 +384,7 @@ def test_tutor_shortcuts_followups_and_live_failure(client, monkeypatch):
     upstream = MagicMock(return_value=response)
     monkeypatch.setattr(tutor_model, "urlopen", upstream)
     result = client.post("/api/tutor", json={"course_id":course,"message":"解释一下","history":history})
-    assert result.json["mode"] == "live" and result.json["answer"] == "真实接口回答"
+    assert result.json["mode"] == "live" and result.json["answer"].startswith("真实接口回答\n\n本次参考范围：")
     payload = json.loads(upstream.call_args.args[0].data)
     assert "main" in payload["messages"][0]["content"]
     assert payload["messages"][1:3] == history

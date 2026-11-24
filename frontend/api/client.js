@@ -35,6 +35,8 @@
         // Reading a response body can fail because it was cancelled or the
         // connection broke. Preserve those errors for the caller's retry UI.
         if (error?.name !== "SyntaxError") throw error;
+        if (response.status === 413) throw new ApiError("文件超过当前服务的上传限制，请压缩或拆分后上传。", 413, null);
+        if ([502, 503, 504].includes(response.status)) throw new ApiError("服务连接中断或等待超时，请稍后重试；AI 任务可先恢复查询。", response.status, null);
         throw new ApiError("服务返回了非 JSON 响应，请检查服务地址和运行状态", response.status, null);
       }
       if (!response.ok) {
@@ -64,8 +66,6 @@
       request,
       getConfig: (options) => request("/api/prototype/config", options),
       getCurrentUser: (options) => request("/api/auth/me", options),
-      requestVerification: (options) => json("POST", "/api/auth/verification/request", {}, options),
-      confirmVerification: (data, options) => json("POST", "/api/auth/verification/confirm", data, options),
       requestPasswordReset: (data, options) => json("POST", "/api/auth/password/request", data, options),
       resetPassword: (data, options) => json("POST", "/api/auth/password/reset", data, options),
       applyTeacher: (data, options) => json("POST", "/api/profile/teacher-application", data, options),

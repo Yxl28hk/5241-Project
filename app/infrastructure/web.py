@@ -2,7 +2,7 @@
 
 from flask import Blueprint, Response, send_from_directory
 
-from app.infrastructure.storage import upload_folder
+from app.infrastructure.storage import serve_upload
 from config import BASE_DIR
 
 bp = Blueprint("web", __name__)
@@ -75,9 +75,9 @@ def static_asset(filename):
 
 @bp.get("/uploads/<path:filename>")
 def uploaded_file(filename):
-    return send_from_directory(upload_folder(), filename)
+    return serve_upload(filename)
 
 
 @bp.get("/avatars/<path:filename>")
 def avatar_file(filename):
-    return send_from_directory(upload_folder(), filename)
+    return serve_upload(filename)

@@ -102,6 +102,14 @@ def focus_context(module, course, key):
             "text": module["lesson"] if module else course["description"],
         }
     if not module:
+        studio = course.get("studio") or {}
+        if key.startswith("section-") and key[8:].isdigit():
+            index = int(key[8:])
+            sections = studio.get("sections", [])
+            if index < len(sections):
+                return {"key": key, "title": sections[index]["title"], "text": sections[index]["body"]}
+        if key in {"example", "task"} and studio.get(key):
+            return {"key": key, "title": "课程示例" if key == "example" else "动手任务", "text": studio[key]}
         return None
     guide = module["guide"]
     if key.startswith("section-") and key[8:].isdigit():

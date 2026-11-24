@@ -87,5 +87,5 @@ $$("[data-tutor-prompt]").forEach(button => button.onclick = () => {
 
 zhixingApi.getConfig().then(config => {
   $("#learning-environment").textContent = "学习画像与进度随账号保存";
-  $("#tutor-mode-label").textContent = config.tutor_mode === "live" ? "AI 答疑 · 基于当前课时，不执行代码" : "课时知识卡 · 规则式助手（非大模型），未读取附件";
+  $("#tutor-mode-label").textContent = config.tutor_mode === "live" ? "AI 答疑 · 参考本课正文与 PDF/PPTX 文字，请核对来源" : "课时知识卡 · 规则式助手（非大模型），未读取附件";
 }).catch(() => { $("#learning-environment").textContent = "服务暂不可用"; });
