@@ -157,7 +157,7 @@
         <div class="ai-intro"><span class="ai-pill" id="studio-ai-model">Claude 课程助手</span><h3>有一份讲义，就可以开始。</h3><p>上传 PDF 或 PPTX，自动整理标题、学习目标、重点章节与练习建议，再给出待确认事项。</p></div>
         <label class="ai-dropzone" for="studio-ai-file"><span class="ai-upload-symbol">↑</span><strong>选择你的课程资料</strong><span id="studio-ai-filename">支持文字型 PDF / PPTX · 文件限制加载中</span><input id="studio-ai-file" type="file" accept=".pdf,.pptx"></label>
         <label class="field ai-audience">主要面向谁？（可选）<select id="studio-ai-audience"><option value="auto">让 AI 根据资料建议</option><option value="beginner">零基础学生</option><option value="intermediate">有一定基础</option><option value="advanced">进阶学习者</option></select></label>
-        <p class="ai-disclosure">点击生成会把提取的资料文字发送至云渡 Claude，并产生 API 用量；只生成草稿，不会自动发布。扫描件暂不支持 OCR。</p>
+        <p class="ai-disclosure">点击生成会把提取的资料文字发送至平台配置的 AI 服务，并产生 API 用量；只生成草稿，不会自动发布。扫描件暂不支持 OCR。</p>
         <div class="ai-actions"><button id="studio-ai-generate" type="button" class="button button-primary" disabled>生成课程草稿与评价</button><button id="studio-ai-cancel" type="button" class="text-action hidden">停止等待</button><button id="studio-ai-resume" type="button" class="text-action hidden">恢复查询</button><button id="studio-ai-edit" type="button" class="text-action">我想手动编辑</button></div>
         <div class="ai-stages"><span class="ai-stage">1 接收资料</span><span class="ai-stage">2 提取文字</span><span class="ai-stage">3 生成与检查</span><span class="ai-stage">4 教师确认</span></div>
         <p id="studio-ai-status" role="status" aria-live="polite"></p>

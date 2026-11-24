@@ -10,7 +10,7 @@ from time import monotonic
 from pathlib import Path
 import subprocess
 import sys
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 from urllib.request import Request, build_opener, HTTPRedirectHandler, ProxyHandler
 from urllib.error import HTTPError, URLError
 from app.studio.authoring import validate_content
@@ -22,6 +22,22 @@ class CourseAIError(Exception):
         self.code=code
 
 LOGGER=logging.getLogger(__name__)
+
+def messages_endpoint(base):
+    """Accept a service base or complete Messages URL without duplicating paths."""
+    parsed=urlparse(base.strip().rstrip('/'))
+    if parsed.scheme!='https' or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise CourseAIError('AI 服务地址必须是有效的 HTTPS 接口地址，不能包含账号、查询参数或片段。','invalid_endpoint')
+    path=parsed.path.rstrip('/')
+    # OpenRouter supports Messages; other providers must explicitly support it.
+    if parsed.hostname=='openrouter.ai' and path in {'','/api','/api/v1','/api/v1/messages','/api/v1/chat/completions'}:
+        path='/api/v1/messages'
+    elif path.endswith('/chat/completions'):
+        raise CourseAIError('教师 AI 需要 Messages 接口；请检查服务商的接口格式和地址。','invalid_endpoint')
+    elif not path.endswith('/messages'):
+        path += '/messages' if path.endswith('/v1') else '/v1/messages'
+    return urlunparse(parsed._replace(path=path))
+
 
 def ai_settings():
     # Explicit project variables take precedence; optional local Claude config is read server-side.
@@ -130,7 +146,7 @@ def request_course(extracted,audience,on_progress=None):
     parsed=urlparse(settings['base'])
     if not settings['key'] or parsed.scheme!='https' or not parsed.netloc:
         raise CourseAIError('教师端 AI 尚未正确配置，请联系平台负责人。')
-    url=settings['base']+('/messages' if settings['base'].endswith('/v1') else '/v1/messages')
+    url=messages_endpoint(settings['base'])
     payload={'model':settings['model'],'max_tokens':4500,'stream':True,'system':SYSTEM,
              'tools':[COURSE_TOOL],'tool_choice':{'type':'tool','name':'submit_course'},
              'messages':[{'role':'user','content':json.dumps({'audience':audience,'source_pages':extracted['pages'],'extraction_warnings':extracted['warnings']},ensure_ascii=False)}]}
@@ -147,27 +163,27 @@ def request_course(extracted,audience,on_progress=None):
             # Keep parser + model + a final socket wait below the hosted 300s limit.
             result=read_message(response,on_progress,deadline=started+(150 if os.environ.get('VERCEL')=='1' else 300))
     except HTTPError as error:
-        message={401:'云渡密钥验证失败，请检查后端配置。',403:'当前密钥分组无权调用所选模型。',429:'云渡请求限流或额度不足，请稍后重试。'}.get(error.code,'云渡服务调用失败，请稍后重试。')
+        message={401:'AI 服务密钥验证失败，请检查后端配置。',403:'当前密钥分组无权调用所选模型。',429:'AI 服务请求限流或额度不足，请稍后重试。'}.get(error.code,'AI 服务调用失败，请稍后重试。')
         raise failure('http_'+str(error.code),message,error) from None
     except (TimeoutError,socket.timeout) as error:
-        raise failure('timeout','等待云渡返回超时，请稍后再试或减少本次资料范围。',error) from None
+        raise failure('timeout','等待 AI 服务返回超时，请稍后再试或减少本次资料范围。',error) from None
     except URLError as error:
         reason=error.reason
         if isinstance(reason,(TimeoutError,socket.timeout)):
-            raise failure('timeout','等待云渡返回超时，请稍后再试。',reason) from None
+            raise failure('timeout','等待 AI 服务返回超时，请稍后再试。',reason) from None
         if isinstance(reason,ssl.SSLError):
-            raise failure('tls_error','与云渡建立安全连接失败，请检查网络或服务地址。',reason) from None
-        raise failure('connection_error','无法连接云渡服务，请检查网络或稍后再试。',reason) from None
+            raise failure('tls_error','与 AI 服务建立安全连接失败，请检查网络或服务地址。',reason) from None
+        raise failure('connection_error','无法连接 AI 服务，请检查网络或稍后再试。',reason) from None
     except (OSError,HTTPException) as error:
-        raise failure('connection_interrupted','与云渡的连接在生成过程中断开，未收到完整结果。',error) from None
+        raise failure('connection_interrupted','与 AI 服务的连接在生成过程中断开，未收到完整结果。',error) from None
     except StreamError as error:
-        messages={'incomplete_response':'云渡在返回完整结果前结束了连接，未采用残缺草稿。',
+        messages={'incomplete_response':'AI 服务在返回完整结果前结束了连接，未采用残缺草稿。',
                   'timeout':'本次生成超过等待时限，请稍后再试或减少资料范围。',
-                  'provider_stream_error':'云渡在生成过程中报告服务错误，请稍后再试。',
+                  'provider_stream_error':'AI 服务在生成过程中报告服务错误，请稍后再试。',
                   'response_too_large':'AI 返回内容过大，请拆分资料。'}
-        raise failure(error.code,messages.get(error.code,'云渡返回的内容格式异常。'),error) from None
+        raise failure(error.code,messages.get(error.code,'AI 服务返回的内容格式异常。'),error) from None
     except (ValueError,UnicodeError,KeyError,TypeError,AttributeError) as error:
-        raise failure('invalid_response','云渡返回的响应格式异常，未采用此结果。',error) from None
+        raise failure('invalid_response','AI 服务返回的响应格式异常，未采用此结果。',error) from None
     data=response_data(result)
     validated=validate_result(data,extracted)
     usage=result.get('usage',{})

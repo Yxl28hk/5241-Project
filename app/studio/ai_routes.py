@@ -97,7 +97,7 @@ def register_studio_ai(app,get_db):
             extracted=parse_file(blob,extension)
             if cancelled():update(state='cancelled',message='已取消，未调用模型。');return
             update(state='generating',stage='generating',extraction={'total_pages':extracted['total_pages'],'characters':extracted['characters']},
-                   message=f"已解析 {extracted['total_pages']} 页、{extracted['characters']} 个字符。正在等待云渡生成，可能需要数分钟，请勿重复提交。")
+                   message=f"已解析 {extracted['total_pages']} 页、{extracted['characters']} 个字符。正在等待 AI 服务生成，可能需要数分钟，请勿重复提交。")
             result=request_course(extracted,audience,on_progress=lambda message:update(message=message))
             if cancelled():update(state='cancelled',message='结果已丢弃；已发出的模型请求仍可能计费。');return
             result['source']={'filename':filename,'sha256':sha256(blob).hexdigest()}
